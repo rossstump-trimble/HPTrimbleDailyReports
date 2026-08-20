@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, TableProperties } from "lucide-react";
+import { ExternalLink, LayoutDashboard, TableProperties } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
@@ -162,14 +162,23 @@ export default function ProjectsPage() {
                 </div>
               </CardContent>
 
-              <CardFooter className="pt-2 border-t border-border">
+              <CardFooter className="pt-2 border-t border-border grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  className="w-full flex items-center gap-1.5"
+                  size="sm"
+                  onClick={() => router.push(`/projects/${project.id}/dashboard`)}
+                >
+                  <LayoutDashboard className="h-3.5 w-3.5" />
+                  Dashboard
+                </Button>
                 <Button
                   className="w-full flex items-center gap-1.5"
                   size="sm"
                   onClick={() => router.push(`/projects/${project.id}/bowling`)}
                 >
                   <TableProperties className="h-3.5 w-3.5" />
-                  Open Master Bowling Sheet
+                  Bowling Sheet
                 </Button>
               </CardFooter>
             </Card>
