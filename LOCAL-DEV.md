@@ -96,7 +96,7 @@ When this workspace is opened in Cursor, agents should follow `.cursor/skills/lo
 
 Local data lives in a JSON store under `data/` (see `lib/store.ts`). It is **not** the VM’s data. Do not commit generated local store files.
 
-Gemini photo extraction needs a Google key. The rest of the UI, bowling grid, and manual intake confirm/submit work without it.
+Gemini photo extraction needs a Google key. Voice intake needs a speech-to-text key (`GROQ_API_KEY` preferred for Whisper, or `OPENAI_API_KEY`, or the same `GEMINI_API_KEY` used for photos). The rest of the UI, bowling grid, and manual intake confirm/submit work without those keys.
 
 ---
 
@@ -157,5 +157,5 @@ The live demo is served from the GCP VM as `https://hp-trimble-lab.com`, systemd
 | `/api/auth/mode` says `"tid"` on localhost | Host header is not loopback, or `AUTH_MODE=tid`. Set `AUTH_MODE=local` and restart. |
 | Blank page / compile error | Read the terminal where `next dev` is running. |
 | `EADDRINUSE :::3000` | Kill the old process: `lsof -ti tcp:3000 \| xargs kill -9` |
-| Intake extract fails | Expected without a Gemini key. Fill the confirmation form by hand. |
+| Intake extract / voice transcribe fails | Expected without a Gemini/Groq/OpenAI key. Fill the confirmation form by hand, or set `GROQ_API_KEY` (Whisper) for phone voice intake. |
 | Changes not on the VM | They will not appear until the branch is merged to `main` and the VM is pulled. |

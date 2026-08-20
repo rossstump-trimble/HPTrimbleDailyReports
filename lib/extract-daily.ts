@@ -1,16 +1,10 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as XLSX from 'xlsx';
+import { isAudioMedia } from '@/lib/audio-mime';
+import { type ExtractedDaily } from '@/lib/extract-response';
+import { transcribeAudioFromBuffer } from '@/lib/transcribe-audio';
 
-export interface ExtractedDaily {
-  tradePartnerName?: string;
-  date?: string; // YYYY-MM-DD
-  locationDescription?: string;
-  workerCount?: number;
-  totalHours?: number;
-  crewBreakdown?: { craft: string; count: number }[];
-  equipment?: string[];
-  notes?: string;
-  staCompleted?: boolean;
-}
+export type { ExtractedDaily } from '@/lib/extract-response';
 
 const EXTRACTION_PROMPT = `You are a construction daily report parser. Extract structured data from this daily report document.
 
@@ -28,6 +22,29 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
 }
 
 Return ONLY the JSON object. No markdown fences, no explanation.`;
+
+const SPOKEN_EXTRACTION_PROMPT = `You are a construction daily report parser. The following is a speech-to-text transcript of a field foreman speaking their daily report.
+
+Extract structured data. Infer reasonable values when the speaker is informal (e.g. "eight guys" → workerCount 8, "STA is done" → staCompleted true).
+
+Return a JSON object with ONLY these fields (omit fields you cannot find or are unsure about):
+{
+  "tradePartnerName": "company name string",
+  "date": "YYYY-MM-DD format",
+  "locationDescription": "location or area worked",
+  "workerCount": number (headcount — total workers on site),
+  "totalHours": number (total worker-hours for the day),
+  "crewBreakdown": [{ "craft": "trade name", "count": number }],
+  "equipment": ["equipment item 1", "equipment item 2"],
+  "notes": "combined string including delays, coordination items, discrepancies, and safety observations",
+  "staCompleted": true or false (Short-Term Anchor / safety task assignment completed)
+}
+
+Return ONLY the JSON object. No markdown fences, no explanation.`;
+
+function geminiApiKey(): string | undefined {
+  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+}
 
 export function parseGeminiDailyJson(text: string): ExtractedDaily {
   const cleaned = text
@@ -54,6 +71,9 @@ export function parseGeminiDailyJson(text: string): ExtractedDaily {
     }
     if (typeof parsed.notes === 'string') result.notes = parsed.notes;
     if (typeof parsed.staCompleted === 'boolean') result.staCompleted = parsed.staCompleted;
+    if (Array.isArray(parsed.emailRecipients)) {
+      result.emailRecipients = (parsed.emailRecipients as unknown[]).filter(e => typeof e === 'string') as string[];
+    }
 
     return result;
   } catch {
@@ -167,11 +187,10 @@ function extractFromXlsx(buffer: Buffer): ExtractedDaily {
 // ─── Gemini vision / PDF extraction ──────────────────────────────────────────
 
 async function extractWithGemini(buffer: Buffer, mimeType: string): Promise<ExtractedDaily> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = geminiApiKey();
   if (!apiKey) return {};
 
   try {
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -186,6 +205,35 @@ async function extractWithGemini(buffer: Buffer, mimeType: string): Promise<Extr
   }
 }
 
+function mergeTranscriptNotes(extracted: ExtractedDaily, transcript: string): ExtractedDaily {
+  const notes = extracted.notes?.trim();
+  return {
+    ...extracted,
+    spokenTranscript: transcript,
+    notes: notes && notes.length > 0 ? notes : transcript,
+  };
+}
+
+export async function extractDailyFromTranscript(transcript: string): Promise<ExtractedDaily> {
+  const trimmed = transcript.trim();
+  if (!trimmed) return {};
+
+  const apiKey = geminiApiKey();
+  if (!apiKey) return mergeTranscriptNotes({}, trimmed);
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const response = await model.generateContent([
+      SPOKEN_EXTRACTION_PROMPT,
+      `TRANSCRIPT:\n"""\n${trimmed}\n"""`,
+    ]);
+    return mergeTranscriptNotes(parseGeminiDailyJson(response.response.text()), trimmed);
+  } catch {
+    return mergeTranscriptNotes({}, trimmed);
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function extractDailyFromBuffer(
@@ -193,6 +241,11 @@ export async function extractDailyFromBuffer(
   mimeType: string,
   filename: string,
 ): Promise<ExtractedDaily> {
+  if (isAudioMedia(mimeType, filename)) {
+    const transcript = await transcribeAudioFromBuffer(buffer, mimeType, filename);
+    return extractDailyFromTranscript(transcript);
+  }
+
   const lower = filename.toLowerCase();
   const isSpreadsheet =
     lower.endsWith('.xlsx') ||

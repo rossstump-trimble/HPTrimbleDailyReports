@@ -9,15 +9,27 @@ import {
   ChevronRight,
   ExternalLink,
   LayoutGrid,
+  ListOrdered,
+  Loader2,
+  MessageSquare,
   Plus,
 } from "lucide-react";
 import FileUploadDropzone from "@/components/intake/FileUploadDropzone";
+import VoiceInterview from "@/components/intake/VoiceInterview";
 import DailyConfirmCard, { type DailyFormData } from "@/components/intake/DailyConfirmCard";
+import type { ExtractedDaily } from "@/lib/extract-response";
+import { extractedDailyHasContent, unwrapExtractResponse } from "@/lib/extract-response";
+import {
+  openingQuestion,
+  type InterviewMode,
+} from "@/lib/fog617-interview";
+import { primeSpeech, speak } from "@/lib/speak";
 import type { TradePartner } from "@/types/hpproto";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type Step = "upload" | "confirm" | "success";
+type CaptureSource = "file" | "voice";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +50,39 @@ function emptyForm(tradePartnerId = "", tradePartnerName = ""): DailyFormData {
     notes: "",
     staCompleted: false,
     emailRecipients: [],
+  };
+}
+
+function applyExtracted(
+  extracted: ExtractedDaily,
+  partners: TradePartner[],
+  current: DailyFormData,
+): DailyFormData {
+  const fields = { ...extracted };
+  delete fields.spokenTranscript;
+  let tradePartnerId = "";
+  let tradePartnerName = fields.tradePartnerName ?? "";
+
+  if (tradePartnerName) {
+    const match = partners.find((tp) => tp.name.toLowerCase() === tradePartnerName.toLowerCase());
+    if (match) {
+      tradePartnerId = match.id;
+      tradePartnerName = match.name;
+    }
+  }
+
+  if (!tradePartnerId && current.tradePartnerId) {
+    tradePartnerId = current.tradePartnerId;
+    tradePartnerName = current.tradePartnerName;
+  }
+
+  return {
+    ...emptyForm(tradePartnerId, tradePartnerName),
+    ...fields,
+    tradePartnerId,
+    tradePartnerName,
+    date: fields.date ?? todayISO(),
+    emailRecipients: fields.emailRecipients ?? current.emailRecipients,
   };
 }
 
@@ -73,7 +118,7 @@ function TrimbleHeader({ projectId }: { projectId: string }) {
 
 function StepIndicator({ step }: { step: Step }) {
   const steps: { key: Step; label: string }[] = [
-    { key: "upload", label: "Upload" },
+    { key: "upload", label: "Capture" },
     { key: "confirm", label: "Review" },
     { key: "success", label: "Done" },
   ];
@@ -114,7 +159,36 @@ function StepIndicator({ step }: { step: Step }) {
   );
 }
 
-function ExtractionWarningBanner() {
+function captureLoadingLabel(source: CaptureSource | null): string {
+  switch (source) {
+    case "voice":
+      return "Transcribing your daily report…";
+    case "file":
+      return "Analyzing report with Gemini…";
+    case null:
+      return "Analyzing your daily report…";
+    default: {
+      const _exhaustive: never = source;
+      return _exhaustive;
+    }
+  }
+}
+
+function extractionWarningBody(source: CaptureSource | null): string {
+  switch (source) {
+    case "voice":
+      return "We could not transcribe that recording. Please fill in the details below, or try speaking again.";
+    case "file":
+    case null:
+      return "We could not parse your file automatically. Please fill in the details below manually.";
+    default: {
+      const _exhaustive: never = source;
+      return _exhaustive;
+    }
+  }
+}
+
+function ExtractionWarningBanner({ source }: { source: CaptureSource | null }) {
   return (
     <div className="flex items-start gap-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700 px-4 py-3">
       <AlertTriangle size={18} className="text-amber-500 flex-none mt-0.5" />
@@ -123,9 +197,20 @@ function ExtractionWarningBanner() {
           AI extraction unavailable
         </p>
         <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-          We could not parse your file automatically. Please fill in the details below manually.
+          {extractionWarningBody(source)}
         </p>
       </div>
+    </div>
+  );
+}
+
+function SpokenTranscriptCard({ transcript }: { transcript: string }) {
+  return (
+    <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+        <h3 className="text-sm font-bold text-blue-700 dark:text-blue-400">What we heard</h3>
+      </div>
+      <p className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{transcript}</p>
     </div>
   );
 }
@@ -178,7 +263,10 @@ export default function IntakePage() {
 
   const [step, setStep] = useState<Step>("upload");
   const [isExtracting, setIsExtracting] = useState(false);
+  const [captureSource, setCaptureSource] = useState<CaptureSource | null>(null);
   const [extractionFailed, setExtractionFailed] = useState(false);
+  const [spokenTranscript, setSpokenTranscript] = useState<string | null>(null);
+  const [interviewMode, setInterviewMode] = useState<InterviewMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<DailyFormData>(emptyForm());
 
@@ -200,10 +288,12 @@ export default function IntakePage() {
 
   // ── Step 1: handle file upload → call extract API ───────────────────────
 
-  const handleFileSelected = useCallback(
-    async (file: File) => {
+  const handleCapture = useCallback(
+    async (file: File, source: CaptureSource) => {
+      setCaptureSource(source);
       setIsExtracting(true);
       setExtractionFailed(false);
+      setSpokenTranscript(null);
 
       try {
         const body = new FormData();
@@ -211,34 +301,19 @@ export default function IntakePage() {
         if (projectId) body.append("projectId", projectId);
 
         const res = await fetch("/api/intake/extract", { method: "POST", body });
-
+        const payload: unknown = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error("extract failed");
 
-        const extracted: Partial<DailyFormData> = await res.json();
-
-        // Find matching trade partner by name if ID not provided
-        let tradePartnerId = extracted.tradePartnerId ?? "";
-        let tradePartnerName = extracted.tradePartnerName ?? "";
-
-        if (!tradePartnerId && tradePartnerName) {
-          const match = tradePartners.find(
-            (tp) => tp.name.toLowerCase() === tradePartnerName.toLowerCase(),
-          );
-          if (match) tradePartnerId = match.id;
-        }
-
-        setFormData({
-          ...emptyForm(tradePartnerId, tradePartnerName),
-          ...extracted,
-          tradePartnerId,
-          tradePartnerName,
-          date: extracted.date ?? todayISO(),
-        });
+        const extracted = unwrapExtractResponse(payload);
+        const hasContent = extractedDailyHasContent(extracted);
+        setSpokenTranscript(extracted.spokenTranscript ?? null);
+        setFormData((current) => applyExtracted(extracted, tradePartners, current));
+        setExtractionFailed(!hasContent);
         setStep("confirm");
       } catch {
-        // Graceful fallback: show empty editable form with warning banner
         setExtractionFailed(true);
-        setFormData(emptyForm());
+        setSpokenTranscript(null);
+        setFormData((current) => emptyForm(current.tradePartnerId, current.tradePartnerName));
         setStep("confirm");
       } finally {
         setIsExtracting(false);
@@ -248,6 +323,27 @@ export default function IntakePage() {
   );
 
   // ── Step 2: handle confirm → call submit API ─────────────────────────────
+
+  const startInterview = useCallback((mode: InterviewMode) => {
+    const opening = openingQuestion(mode);
+    primeSpeech();
+    speak(opening.prompt);
+    setInterviewMode(mode);
+    setCaptureSource("voice");
+    setExtractionFailed(false);
+    setSpokenTranscript(null);
+  }, []);
+
+  const handleInterviewComplete = useCallback(
+    (extracted: ExtractedDaily) => {
+      setSpokenTranscript(extracted.spokenTranscript ?? null);
+      setFormData((current) => applyExtracted(extracted, tradePartners, current));
+      setExtractionFailed(!extractedDailyHasContent(extracted));
+      setInterviewMode(null);
+      setStep("confirm");
+    },
+    [tradePartners],
+  );
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
@@ -271,6 +367,9 @@ export default function IntakePage() {
   const resetToUpload = useCallback(() => {
     setStep("upload");
     setExtractionFailed(false);
+    setSpokenTranscript(null);
+    setCaptureSource(null);
+    setInterviewMode(null);
     setFormData(emptyForm());
   }, []);
 
@@ -292,7 +391,7 @@ export default function IntakePage() {
                 Submit Daily Report
               </h1>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Upload your trade partner daily report — photo, PDF, or spreadsheet.
+                Let the agent ask FOG617 questions, speak the whole daily, or upload a file.
               </p>
             </div>
 
@@ -314,7 +413,7 @@ export default function IntakePage() {
                   }}
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
                 >
-                  <option value="">— Will be detected from document —</option>
+                  <option value="">— Detected from your report, or pick now —</option>
                   {tradePartners.map((tp) => (
                     <option key={tp.id} value={tp.id}>
                       {tp.name}
@@ -324,10 +423,68 @@ export default function IntakePage() {
               </div>
             )}
 
-            <FileUploadDropzone
-              onFileSelected={handleFileSelected}
-              isLoading={isExtracting}
-            />
+            {isExtracting ? (
+              <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-700 px-6 py-12 text-center">
+                <Loader2 size={40} className="animate-spin text-blue-600 dark:text-blue-400" />
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  {captureLoadingLabel(captureSource)}
+                </p>
+                <p className="text-xs text-blue-500 dark:text-blue-400">This usually takes a few seconds</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {interviewMode ? (
+                  <VoiceInterview
+                    mode={interviewMode}
+                    seedDraft={{
+                      tradePartnerName: formData.tradePartnerName || undefined,
+                    }}
+                    onComplete={handleInterviewComplete}
+                    onCancel={() => setInterviewMode(null)}
+                  />
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-5 space-y-3">
+                      <div>
+                        <p className="text-sm font-bold text-blue-700 dark:text-blue-400">Speak your daily</p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                          The agent talks back with FOG617 questions. Pick how you want to answer.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startInterview("guided")}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#0063a3" }}
+                      >
+                        <ListOrdered size={18} />
+                        One question at a time
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startInterview("dump")}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-5 py-3.5 text-sm font-semibold text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      >
+                        <MessageSquare size={18} />
+                        Tell the whole daily
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-3 px-1">
+                      <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">or upload</span>
+                      <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+                    </div>
+
+                    <FileUploadDropzone
+                      onFileSelected={(file) => {
+                        void handleCapture(file, "file");
+                      }}
+                    />
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -345,7 +502,9 @@ export default function IntakePage() {
               </p>
             </div>
 
-            {extractionFailed && <ExtractionWarningBanner />}
+            {extractionFailed && <ExtractionWarningBanner source={captureSource} />}
+
+            {spokenTranscript && <SpokenTranscriptCard transcript={spokenTranscript} />}
 
             <DailyConfirmCard
               tradePartners={tradePartners}

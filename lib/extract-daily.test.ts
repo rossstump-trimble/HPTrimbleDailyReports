@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseGeminiDailyJson, extractDailyFromBuffer } from './extract-daily';
+import { parseGeminiDailyJson, extractDailyFromBuffer, extractDailyFromTranscript } from './extract-daily';
 
 // ─── parseGeminiDailyJson ────────────────────────────────────────────────────
 
@@ -213,5 +213,73 @@ describe('extractDailyFromBuffer – Gemini API key absent', () => {
       'screenshot.png',
     );
     expect(result).toEqual({});
+  });
+});
+
+describe('extractDailyFromBuffer – audio without STT keys', () => {
+  const keys = ['GROQ_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'] as const;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const key of keys) {
+      saved[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of keys) {
+      if (saved[key] !== undefined) process.env[key] = saved[key];
+      else delete process.env[key];
+    }
+  });
+
+  it('returns empty object for webm when no STT provider is configured', async () => {
+    const result = await extractDailyFromBuffer(
+      Buffer.from('fake-audio'),
+      'audio/webm',
+      'daily.webm',
+    );
+    expect(result).toEqual({});
+  });
+
+  it('returns empty object for iOS m4a when no STT provider is configured', async () => {
+    const result = await extractDailyFromBuffer(
+      Buffer.from('fake-audio'),
+      'audio/mp4',
+      'daily.m4a',
+    );
+    expect(result).toEqual({});
+  });
+});
+
+describe('extractDailyFromTranscript – Gemini API key absent', () => {
+  let saved: string | undefined;
+  let savedGoogle: string | undefined;
+
+  beforeEach(() => {
+    saved = process.env.GEMINI_API_KEY;
+    savedGoogle = process.env.GOOGLE_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+  });
+
+  afterEach(() => {
+    if (saved !== undefined) process.env.GEMINI_API_KEY = saved;
+    else delete process.env.GEMINI_API_KEY;
+    if (savedGoogle !== undefined) process.env.GOOGLE_API_KEY = savedGoogle;
+    else delete process.env.GOOGLE_API_KEY;
+  });
+
+  it('keeps the spoken words in notes when extraction is unavailable', async () => {
+    const result = await extractDailyFromTranscript(
+      'ALC, six electricians, 48 hours, STA is done, no delays.',
+    );
+    expect(result.spokenTranscript).toBe('ALC, six electricians, 48 hours, STA is done, no delays.');
+    expect(result.notes).toBe('ALC, six electricians, 48 hours, STA is done, no delays.');
+  });
+
+  it('returns empty object for blank transcript', async () => {
+    expect(await extractDailyFromTranscript('   ')).toEqual({});
   });
 });
