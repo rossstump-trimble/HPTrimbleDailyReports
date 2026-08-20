@@ -1,6 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as XLSX from 'xlsx';
 import { isAudioMedia } from '@/lib/audio-mime';
+import { geminiGenerate, GEMINI_TEXT_MODEL } from '@/lib/gemini-client';
 import { type ExtractedDaily } from '@/lib/extract-response';
 import { transcribeAudioFromBuffer } from '@/lib/transcribe-audio';
 
@@ -41,10 +41,6 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
 }
 
 Return ONLY the JSON object. No markdown fences, no explanation.`;
-
-function geminiApiKey(): string | undefined {
-  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-}
 
 export function parseGeminiDailyJson(text: string): ExtractedDaily {
   const cleaned = text
@@ -187,22 +183,15 @@ function extractFromXlsx(buffer: Buffer): ExtractedDaily {
 // ─── Gemini vision / PDF extraction ──────────────────────────────────────────
 
 async function extractWithGemini(buffer: Buffer, mimeType: string): Promise<ExtractedDaily> {
-  const apiKey = geminiApiKey();
-  if (!apiKey) return {};
-
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-    const base64 = buffer.toString('base64');
-    const response = await model.generateContent([
-      EXTRACTION_PROMPT,
-      { inlineData: { data: base64, mimeType } },
-    ]);
-    return parseGeminiDailyJson(response.response.text());
-  } catch {
-    return {};
-  }
+  const result = await geminiGenerate({
+    model: GEMINI_TEXT_MODEL,
+    parts: [
+      { text: EXTRACTION_PROMPT },
+      { inlineData: { data: buffer.toString('base64'), mimeType } },
+    ],
+  });
+  if (!result?.text) return {};
+  return parseGeminiDailyJson(result.text);
 }
 
 function mergeTranscriptNotes(extracted: ExtractedDaily, transcript: string): ExtractedDaily {
@@ -214,24 +203,23 @@ function mergeTranscriptNotes(extracted: ExtractedDaily, transcript: string): Ex
   };
 }
 
-export async function extractDailyFromTranscript(transcript: string): Promise<ExtractedDaily> {
+export async function extractDailyFromTranscript(
+  transcript: string,
+  requestId?: string,
+): Promise<ExtractedDaily> {
   const trimmed = transcript.trim();
   if (!trimmed) return {};
 
-  const apiKey = geminiApiKey();
-  if (!apiKey) return mergeTranscriptNotes({}, trimmed);
-
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const response = await model.generateContent([
-      SPOKEN_EXTRACTION_PROMPT,
-      `TRANSCRIPT:\n"""\n${trimmed}\n"""`,
-    ]);
-    return mergeTranscriptNotes(parseGeminiDailyJson(response.response.text()), trimmed);
-  } catch {
-    return mergeTranscriptNotes({}, trimmed);
-  }
+  const result = await geminiGenerate({
+    model: GEMINI_TEXT_MODEL,
+    requestId,
+    parts: [
+      { text: SPOKEN_EXTRACTION_PROMPT },
+      { text: `TRANSCRIPT:\n"""\n${trimmed}\n"""` },
+    ],
+  });
+  if (!result?.text) return mergeTranscriptNotes({}, trimmed);
+  return mergeTranscriptNotes(parseGeminiDailyJson(result.text), trimmed);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

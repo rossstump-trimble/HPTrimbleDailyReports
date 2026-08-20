@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalAuthRequest } from "@/lib/auth-mode";
+import { logAuthEvent, requestAuthSnapshot } from "@/lib/auth-debug";
 import { applyLocalAuthCookies, hasLocalOrTidSession } from "@/lib/local-session";
+import { publicAppUrl } from "@/lib/public-origin";
 
 function isPublicPath(pathname: string): boolean {
   return (
@@ -33,8 +35,13 @@ export function middleware(request: NextRequest) {
   const authed = hasLocalOrTidSession(request);
 
   if (!authed) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicAppUrl(request, "/login");
     loginUrl.searchParams.set("from", pathname);
+    logAuthEvent("tid.middleware.unauth", {
+      ...requestAuthSnapshot(request),
+      pathname,
+      location: loginUrl.toString(),
+    });
     return NextResponse.redirect(loginUrl);
   }
 

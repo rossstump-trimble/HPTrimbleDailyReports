@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalAuthRequest } from "@/lib/auth-mode";
+import { logAuthEvent, requestAuthSnapshot } from "@/lib/auth-debug";
 import { generatePKCE, getTIDConfig } from "@/lib/tid-auth";
 
 export const dynamic = "force-dynamic";
@@ -12,15 +13,18 @@ export async function GET(request: NextRequest) {
   if (isLocalAuthRequest(request)) {
     const localUrl = new URL("/api/auth/local", request.url);
     localUrl.searchParams.set("from", from);
+    logAuthEvent("tid.login.local", {
+      ...requestAuthSnapshot(request),
+      from,
+      location: localUrl.toString(),
+    });
     return NextResponse.redirect(localUrl);
   }
 
   const config = getTIDConfig();
-
-  // Determine host dynamically if behind proxy
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "hp-trimble-lab.com";
-  const proto = request.headers.get("x-forwarded-proto") || "https";
-  const redirectUri = `${proto}://${host}/auth/callback`;
+  // Always advertise the registered public callback. Next behind Caddy sees
+  // Host: localhost:3000, which Trimble Identity would then send the browser to.
+  const redirectUri = config.callbackUrl;
 
   const { verifier, challenge, state } = generatePKCE();
 
@@ -32,6 +36,15 @@ export async function GET(request: NextRequest) {
   authUrl.searchParams.set("state", state);
   authUrl.searchParams.set("code_challenge", challenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
+
+  logAuthEvent("tid.login.redirect", {
+    ...requestAuthSnapshot(request),
+    from,
+    redirectUri,
+    configuredBaseUrl: config.baseUrl,
+    authorizeHost: authUrl.host,
+    hasPkceCookie: true,
+  });
 
   const response = NextResponse.redirect(authUrl.toString());
 

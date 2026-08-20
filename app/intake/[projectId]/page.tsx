@@ -20,10 +20,9 @@ import DailyConfirmCard, { type DailyFormData } from "@/components/intake/DailyC
 import type { ExtractedDaily } from "@/lib/extract-response";
 import { extractedDailyHasContent, unwrapExtractResponse } from "@/lib/extract-response";
 import {
-  openingQuestion,
   type InterviewMode,
 } from "@/lib/fog617-interview";
-import { primeSpeech, speak } from "@/lib/speak";
+import { primeSpeech } from "@/lib/speak";
 import type { TradePartner } from "@/types/hpproto";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -328,9 +327,7 @@ export default function IntakePage() {
   // ── Step 2: handle confirm → call submit API ─────────────────────────────
 
   const startInterview = useCallback((mode: InterviewMode) => {
-    const opening = openingQuestion(mode);
     primeSpeech();
-    speak(opening.prompt);
     setInterviewMode(mode);
     setCaptureSource("voice");
     setExtractionFailed(false);

@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { logAuthEvent, requestAuthSnapshot } from "@/lib/auth-debug";
+import { publicAppUrl } from "@/lib/public-origin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const loginUrl = new URL("/login", request.url);
+  const loginUrl = publicAppUrl(request, "/login");
+  logAuthEvent("tid.logout", {
+    ...requestAuthSnapshot(request),
+    location: loginUrl.toString(),
+  });
   const response = NextResponse.redirect(loginUrl);
 
   response.cookies.set("ps_session", "", { path: "/", maxAge: 0 });

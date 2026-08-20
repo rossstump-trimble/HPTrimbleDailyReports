@@ -12,6 +12,7 @@ import {
 } from "@/lib/fog617-interview";
 import type { ExtractedDaily } from "@/lib/extract-response";
 import { primeSpeech, speak, stopSpeaking } from "@/lib/speak";
+import { errorMessage, newVoiceRequestId, voiceLog } from "@/lib/voice-log";
 
 interface VoiceInterviewProps {
   mode: InterviewMode;
@@ -59,9 +60,13 @@ export default function VoiceInterview({
 
   useEffect(() => () => stopSpeaking(), []);
 
+  useEffect(() => {
+    void speak(prompt);
+  }, [prompt]);
+
   const hearAgain = useCallback(() => {
     primeSpeech();
-    speak(prompt);
+    void speak(prompt);
   }, [prompt]);
 
   const finishIfDone = useCallback(
@@ -76,7 +81,6 @@ export default function VoiceInterview({
       setSlotId(next.nextSlotId);
       if (next.nextPrompt) {
         setPrompt(next.nextPrompt);
-        speak(next.nextPrompt);
       }
     },
     [onComplete],
@@ -95,13 +99,37 @@ export default function VoiceInterview({
         if (slotId) body.append("slotId", slotId);
         if (file) body.append("file", file);
 
-        const res = await fetch("/api/intake/turn", { method: "POST", body });
-        const payload = (await res.json()) as TurnResponse;
+        const requestId = newVoiceRequestId();
+        voiceLog("interview", "info", "turn fetch start", {
+          requestId,
+          mode,
+          skip,
+          slotId,
+          fileBytes: file?.size ?? 0,
+          fileType: file?.type ?? null,
+        });
+        const res = await fetch("/api/intake/turn", {
+          method: "POST",
+          headers: { "x-voice-request-id": requestId },
+          body,
+        });
+        const payload = (await res.json()) as TurnResponse & { error?: string; requestId?: string };
         if (!res.ok || !payload.success) {
-          throw new Error("turn failed");
+          voiceLog("interview", "error", "turn fetch failed", {
+            requestId: payload.requestId ?? requestId,
+            status: res.status,
+            error: payload.error ?? "turn failed",
+          });
+          throw new Error(payload.error || `turn failed (${res.status})`);
         }
+        voiceLog("interview", "info", "turn fetch ok", {
+          requestId: payload.requestId ?? requestId,
+          done: payload.done,
+          nextSlotId: payload.nextSlotId,
+        });
         finishIfDone(payload);
-      } catch {
+      } catch (err) {
+        voiceLog("interview", "error", "turn client error", { error: errorMessage(err) });
         setError("Could not transcribe that answer. Try again, or skip if this field is optional.");
       } finally {
         setBusy(false);
@@ -138,6 +166,7 @@ export default function VoiceInterview({
           variant="compact"
           disabled={busy}
           startLabel="Tap to answer"
+          onStartIntent={stopSpeaking}
           onStopIntent={primeSpeech}
           onRecordingComplete={(file) => {
             void runTurn(file, false);

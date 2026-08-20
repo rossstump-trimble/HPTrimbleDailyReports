@@ -7,6 +7,7 @@ import {
   extensionForAudioMime,
   pickRecorderMimeType,
 } from "@/lib/audio-mime";
+import { errorMessage, voiceLog } from "@/lib/voice-log";
 import { cn } from "@/lib/utils";
 
 const MAX_SECONDS = 180;
@@ -73,6 +74,7 @@ function createAudioContext(): AudioContext | null {
 interface VoiceRecorderProps {
   onRecordingComplete: (file: File) => void;
   onStopIntent?: () => void;
+  onStartIntent?: () => void;
   disabled?: boolean;
   variant?: "card" | "compact";
   startLabel?: string;
@@ -81,6 +83,7 @@ interface VoiceRecorderProps {
 export default function VoiceRecorder({
   onRecordingComplete,
   onStopIntent,
+  onStartIntent,
   disabled = false,
   variant = "card",
   startLabel = "Tap to talk",
@@ -104,6 +107,8 @@ export default function VoiceRecorder({
   onCompleteRef.current = onRecordingComplete;
   const onStopIntentRef = useRef(onStopIntent);
   onStopIntentRef.current = onStopIntent;
+  const onStartIntentRef = useRef(onStartIntent);
+  onStartIntentRef.current = onStartIntent;
 
   const tearDown = useCallback(() => {
     if (rafRef.current != null) {
@@ -141,12 +146,18 @@ export default function VoiceRecorder({
     stoppingRef.current = false;
 
     if (blob.size < 256) {
+      voiceLog("recorder", "error", "recording too small", { bytes: blob.size, mime });
       setError("unknown");
       return;
     }
 
     const ext = extensionForAudioMime(mime);
     const file = new File([blob], `daily-report.${ext}`, { type: blob.type || mime });
+    voiceLog("recorder", "info", "recording complete", {
+      bytes: blob.size,
+      mime: file.type,
+      filename: file.name,
+    });
     onCompleteRef.current(file);
   }, [tearDown]);
 
@@ -187,15 +198,23 @@ export default function VoiceRecorder({
     setError(null);
 
     if (typeof window !== "undefined" && !window.isSecureContext) {
+      voiceLog("recorder", "error", "insecure context, mic blocked", {
+        protocol: window.location.protocol,
+      });
       setError("insecure");
       return;
     }
     if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      voiceLog("recorder", "error", "MediaRecorder or getUserMedia missing", {
+        mediaRecorder: typeof MediaRecorder !== "undefined",
+        getUserMedia: Boolean(navigator.mediaDevices?.getUserMedia),
+      });
       setError("unsupported");
       return;
     }
 
     startingRef.current = true;
+    onStartIntentRef.current?.();
     const mimeType = pickRecorderMimeType((mime) => MediaRecorder.isTypeSupported(mime));
     mimeRef.current = mimeType;
 
@@ -219,7 +238,10 @@ export default function VoiceRecorder({
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
-      recorder.onerror = () => {
+      recorder.onerror = (event) => {
+        voiceLog("recorder", "error", "MediaRecorder error", {
+          error: errorMessage((event as Event & { error?: unknown }).error),
+        });
         setError("unknown");
         tearDown();
         setRecording(false);
@@ -247,12 +269,22 @@ export default function VoiceRecorder({
       recorder.start(1000);
       setRecording(true);
       setElapsed(0);
+      voiceLog("recorder", "info", "recording started", {
+        mimeType: mimeRef.current,
+        trackCount: stream.getAudioTracks().length,
+      });
       timerRef.current = window.setInterval(() => {
         setElapsed((prev) => prev + 1);
       }, 1000);
     } catch (err) {
+      const classified = classifyGetUserMediaError(err);
+      voiceLog("recorder", "error", "getUserMedia failed", {
+        classified,
+        error: errorMessage(err),
+        name: err && typeof err === "object" && "name" in err ? String(err.name) : null,
+      });
       tearDown();
-      setError(classifyGetUserMediaError(err));
+      setError(classified);
     } finally {
       startingRef.current = false;
     }

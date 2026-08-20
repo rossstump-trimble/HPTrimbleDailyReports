@@ -1,8 +1,26 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { logAuthEvent, requestAuthSnapshot } from "@/lib/auth-debug";
+import { publicAppUrl, tidOAuthRedirectUri } from "@/lib/public-origin";
 import { decodeJWT, exchangeCodeForTokens } from "@/lib/tid-auth";
 
 export const dynamic = "force-dynamic";
+
+function failToLogin(
+  request: NextRequest,
+  error: string,
+  extra: Record<string, unknown> = {}
+): NextResponse {
+  const loginUrl = publicAppUrl(request, "/login");
+  loginUrl.searchParams.set("error", error);
+  logAuthEvent("tid.callback.fail", {
+    ...requestAuthSnapshot(request),
+    error,
+    location: loginUrl.toString(),
+    ...extra,
+  });
+  return NextResponse.redirect(loginUrl);
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -11,43 +29,49 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
   const errorDescription = searchParams.get("error_description");
 
+  logAuthEvent("tid.callback.start", {
+    ...requestAuthSnapshot(request),
+    hasCode: Boolean(code),
+    hasState: Boolean(state),
+    tidError: error || "",
+  });
+
   if (error) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", errorDescription || error);
-    return NextResponse.redirect(loginUrl);
+    return failToLogin(request, errorDescription || error, { tidError: error });
   }
 
   if (!code || !state) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "Missing authorization code or state");
-    return NextResponse.redirect(loginUrl);
+    return failToLogin(request, "Missing authorization code or state");
   }
 
   const pkceCookie = request.cookies.get("tid_pkce")?.value;
   if (!pkceCookie) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "Session state expired. Please sign in again.");
-    return NextResponse.redirect(loginUrl);
+    return failToLogin(request, "Session state expired. Please sign in again.", {
+      hasPkceCookie: false,
+    });
   }
 
   let parsedPkce: { verifier: string; state: string; from?: string; redirectUri?: string };
   try {
     parsedPkce = JSON.parse(pkceCookie);
   } catch {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "Invalid session state.");
-    return NextResponse.redirect(loginUrl);
+    return failToLogin(request, "Invalid session state.", { pkceParse: "invalid-json" });
   }
 
   if (parsedPkce.state !== state) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "State verification failed.");
-    return NextResponse.redirect(loginUrl);
+    return failToLogin(request, "State verification failed.", { stateMatch: false });
   }
 
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "hp-trimble-lab.com";
-  const proto = request.headers.get("x-forwarded-proto") || "https";
-  const redirectUri = parsedPkce.redirectUri || `${proto}://${host}/auth/callback`;
+  const storedRedirectUri = parsedPkce.redirectUri || "";
+  const redirectUri = tidOAuthRedirectUri(parsedPkce.redirectUri);
+
+  logAuthEvent("tid.callback.exchange", {
+    ...requestAuthSnapshot(request),
+    storedRedirectUri,
+    redirectUri,
+    from: parsedPkce.from || "/",
+    replacedLoopbackCallback: Boolean(storedRedirectUri) && storedRedirectUri !== redirectUri,
+  });
 
   try {
     const tokens = await exchangeCodeForTokens(code, parsedPkce.verifier, redirectUri);
@@ -72,7 +96,17 @@ export async function GET(request: NextRequest) {
     };
 
     const target = parsedPkce.from && parsedPkce.from.startsWith("/") ? parsedPkce.from : "/";
-    const response = NextResponse.redirect(new URL(target, request.url));
+    const location = publicAppUrl(request, target);
+    const response = NextResponse.redirect(location);
+
+    logAuthEvent("tid.callback.ok", {
+      ...requestAuthSnapshot(request),
+      location: location.toString(),
+      target,
+      hasAccessToken: Boolean(tokens.access_token),
+      expiresIn: tokens.expires_in || 0,
+      emailDomain: email.includes("@") ? email.split("@")[1] : "",
+    });
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
 
@@ -106,8 +140,9 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", `Authentication failed: ${errMsg}`);
-    return NextResponse.redirect(loginUrl);
+    return failToLogin(request, `Authentication failed: ${errMsg}`, {
+      exchangeError: errMsg.slice(0, 400),
+      redirectUri,
+    });
   }
 }

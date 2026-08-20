@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { logAuthEvent } from "@/lib/auth-debug";
+import { configuredPublicBaseUrl, configuredTidCallbackUrl } from "@/lib/public-base";
 
 export interface TIDTokens {
   access_token: string;
@@ -22,8 +24,8 @@ export function getTIDConfig() {
   const clientSecret = process.env.TID_CLIENT_SECRET || "";
   const issuer = (process.env.TID_ISSUER || "https://id.trimble.com").replace(/\/+$/, "");
   const scopes = process.env.TID_SCOPES || "openid ProjectSight_API_US1:ProjectSight_API_US1";
-  const baseUrl = (process.env.PUBLIC_BASE_URL || "https://hp-trimble-lab.com").replace(/\/+$/, "");
-  const callbackUrl = process.env.TID_CALLBACK_URL || `${baseUrl}/auth/callback`;
+  const baseUrl = configuredPublicBaseUrl();
+  const callbackUrl = configuredTidCallbackUrl();
 
   return {
     clientId,
@@ -74,6 +76,13 @@ export async function exchangeCodeForTokens(
     client_id: config.clientId,
   });
 
+  logAuthEvent("tid.token_exchange.start", {
+    redirectUri,
+    tokenUrl: config.tokenUrl,
+    hasCode: Boolean(code),
+    hasVerifier: Boolean(verifier),
+  });
+
   const response = await fetch(config.tokenUrl, {
     method: "POST",
     headers: {
@@ -86,8 +95,22 @@ export async function exchangeCodeForTokens(
 
   if (!response.ok) {
     const errText = await response.text();
+    logAuthEvent("tid.token_exchange.fail", {
+      redirectUri,
+      tokenUrl: config.tokenUrl,
+      status: response.status,
+      detail: errText.slice(0, 400),
+    });
     throw new Error(`TID Token exchange failed (${response.status}): ${errText}`);
   }
 
-  return response.json();
+  const tokens = (await response.json()) as TIDTokens;
+  logAuthEvent("tid.token_exchange.ok", {
+    redirectUri,
+    expiresIn: tokens.expires_in || 0,
+    hasAccessToken: Boolean(tokens.access_token),
+    hasIdToken: Boolean(tokens.id_token),
+    hasRefreshToken: Boolean(tokens.refresh_token),
+  });
+  return tokens;
 }
