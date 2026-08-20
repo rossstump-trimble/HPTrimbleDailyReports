@@ -100,7 +100,7 @@ export function AskAgent({
             Ask the dashboard
           </SheetTitle>
           <SheetDescription>
-            Answers come from this month's bowling data — not a live Project Sight call.
+            Answers come from bowling data for this month — not a live ProjectSight call.
           </SheetDescription>
         </SheetHeader>
 
