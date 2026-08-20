@@ -7,15 +7,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { LogOut, ChevronDown } from "lucide-react";
-import { users } from "@/data/users";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { LogOut, ChevronDown, User } from "lucide-react";
 
 export function UserPopover() {
   const [currentUser, setCurrentUser] = useState({
     name: "Ross Stump",
     email: "ross_stump@trimble.com",
-    avatar: users[0]?.avatar || "/avatars/Emma.jpeg",
   });
 
   useEffect(() => {
@@ -37,13 +35,6 @@ export function UserPopover() {
     }
   }, []);
 
-  const initials = (currentUser.name || "RS")
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
   const handleSignOut = () => {
     window.location.href = "/api/auth/logout";
   };
@@ -56,9 +47,8 @@ export function UserPopover() {
           className="inline-flex items-center gap-1.5 rounded-full px-1 py-1 border-none bg-transparent cursor-pointer transition-colors hover:bg-muted"
         >
           <Avatar className="h-8 w-8">
-            <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-            <AvatarFallback className="bg-primary/10 text-xs font-medium">
-              {initials}
+            <AvatarFallback className="bg-muted text-muted-foreground">
+              <User className="h-4 w-4" aria-hidden />
             </AvatarFallback>
           </Avatar>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -69,9 +59,8 @@ export function UserPopover() {
         {/* User identity header */}
         <div className="flex flex-col items-center gap-2 px-4 py-5">
           <Avatar className="h-16 w-16">
-            <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-            <AvatarFallback className="bg-primary/10 text-lg font-medium">
-              {initials}
+            <AvatarFallback className="bg-muted text-muted-foreground">
+              <User className="h-8 w-8" aria-hidden />
             </AvatarFallback>
           </Avatar>
           <div className="text-center">

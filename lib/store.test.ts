@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getStore, saveStore, upsertDailyReport, getProjectById, getBowlingMatrix } from './store';
+import { getStore, saveStore, upsertDailyReport, getProjectById, getBowlingMatrix, getDailyReportById, markDailySentToProjectSight } from './store';
 import fs from 'fs';
 import path from 'path';
 
@@ -107,5 +107,43 @@ describe('HPproto Local Store', () => {
     saveStore(store, TEST_DB_PATH);
     const reloaded = getStore(TEST_DB_PATH);
     expect(reloaded.dailyReports.find(r => r.id === 'rpt-atomic')).toBeDefined();
+  });
+
+  it('preserves rawSourcePath across same-day upsert and records ProjectSight send ids', () => {
+    const report1 = {
+      id: 'rpt-1',
+      projectId: 'cys07',
+      tradePartnerId: 'alc',
+      tradePartnerName: 'ALC',
+      date: '2026-08-20',
+      submittedAt: new Date().toISOString(),
+      locationDescription: 'Building A 2nd Floor',
+      workerCount: 5,
+      totalHours: 40,
+      crewBreakdown: [{ craft: 'Electrician', count: 5 }],
+      equipment: ['Scissor Lift'],
+      notes: 'No delays',
+      staCompleted: true,
+      emailRecipients: ['test@alc.com'],
+      rawSourcePath: 'rpt-1/FOG617.xlsx',
+    };
+
+    upsertDailyReport(report1, TEST_DB_PATH);
+    const again = { ...report1, id: 'rpt-2', workerCount: 9 };
+    upsertDailyReport(again, TEST_DB_PATH);
+    const stored = getDailyReportById('rpt-2', TEST_DB_PATH);
+    expect(stored?.rawSourcePath).toBe('rpt-1/FOG617.xlsx');
+    const marked = markDailySentToProjectSight(
+      'rpt-2',
+      {
+        projectSightDailyId: 'ps-99',
+        projectSightPortfolioId: 'pf-1',
+        projectSightProjectId: 'proj-1',
+        sentToProjectSightAt: '2026-08-20T18:00:00.000Z',
+      },
+      TEST_DB_PATH,
+    );
+    expect(marked?.projectSightDailyId).toBe('ps-99');
+    expect(getDailyReportById('rpt-2', TEST_DB_PATH)?.workerCount).toBe(9);
   });
 });

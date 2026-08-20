@@ -1,5 +1,5 @@
 import { LucideIcon } from "lucide-react";
-import { LayoutGrid, TableProperties, QrCode } from "lucide-react";
+import { ClipboardList, LayoutGrid, TableProperties, QrCode } from "lucide-react";
 import { IconType } from "react-icons";
 
 export interface MenuItem {
@@ -28,6 +28,13 @@ export const navigationData: MenuItem[] = [
     icon: TableProperties,
     path: "/projects/cys07/bowling",
     order: 20,
+  },
+  {
+    id: "daily-report",
+    name: "Daily Report",
+    icon: ClipboardList,
+    path: "/daily",
+    order: 25,
   },
   {
     id: "trade-qr-intake",

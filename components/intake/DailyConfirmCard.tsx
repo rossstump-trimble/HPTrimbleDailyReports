@@ -91,6 +91,9 @@ interface DailyConfirmCardProps {
   onCancel: () => void;
   onSubmit: () => void;
   isSubmitting?: boolean;
+  submitLabel?: string;
+  requireTradePartner?: boolean;
+  submitDisabled?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -102,6 +105,9 @@ export default function DailyConfirmCard({
   onCancel,
   onSubmit,
   isSubmitting = false,
+  submitLabel = "Confirm & Submit Daily",
+  requireTradePartner = true,
+  submitDisabled = false,
 }: DailyConfirmCardProps) {
   const set = useCallback(
     <K extends keyof DailyFormData>(key: K, value: DailyFormData[K]) => {
@@ -145,26 +151,34 @@ export default function DailyConfirmCard({
       {/* ── Trade partner & date ───────────────────────────────────────────── */}
       <Section title="Report Details">
         <div>
-          <FieldLabel required>Trade Partner</FieldLabel>
-          <select
-            value={data.tradePartnerId}
-            onChange={(e) => {
-              const tp = tradePartners.find((t) => t.id === e.target.value);
-              onChange({
-                ...data,
-                tradePartnerId: e.target.value,
-                tradePartnerName: tp?.name ?? "",
-              });
-            }}
-            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:focus:ring-blue-500 transition"
-          >
-            <option value="">— Select trade partner —</option>
-            {tradePartners.map((tp) => (
-              <option key={tp.id} value={tp.id}>
-                {tp.name}
-              </option>
-            ))}
-          </select>
+          <FieldLabel required={requireTradePartner}>Trade Partner</FieldLabel>
+          {tradePartners.length > 0 ? (
+            <select
+              value={data.tradePartnerId}
+              onChange={(e) => {
+                const tp = tradePartners.find((t) => t.id === e.target.value);
+                onChange({
+                  ...data,
+                  tradePartnerId: e.target.value,
+                  tradePartnerName: tp?.name ?? "",
+                });
+              }}
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:focus:ring-blue-500 transition"
+            >
+              <option value="">— Select trade partner —</option>
+              {tradePartners.map((tp) => (
+                <option key={tp.id} value={tp.id}>
+                  {tp.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <FieldInput
+              value={data.tradePartnerName}
+              onChange={(v) => onChange({ ...data, tradePartnerName: v })}
+              placeholder="Company / trade partner"
+            />
+          )}
         </div>
 
         <div>
@@ -330,7 +344,7 @@ export default function DailyConfirmCard({
         <button
           type="button"
           onClick={onSubmit}
-          disabled={isSubmitting || !data.tradePartnerId || !data.date}
+          disabled={isSubmitting || submitDisabled || !data.date || (requireTradePartner && !data.tradePartnerId)}
           className="flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: "#0063a3" }}
         >
@@ -342,7 +356,7 @@ export default function DailyConfirmCard({
           ) : (
             <>
               <Send size={16} />
-              Confirm &amp; Submit Daily
+              {submitLabel}
             </>
           )}
         </button>

@@ -269,6 +269,7 @@ export default function IntakePage() {
   const [interviewMode, setInterviewMode] = useState<InterviewMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<DailyFormData>(emptyForm());
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
 
   // ── Fetch trade partners from bowling API ────────────────────────────────
 
@@ -309,11 +310,13 @@ export default function IntakePage() {
         setSpokenTranscript(extracted.spokenTranscript ?? null);
         setFormData((current) => applyExtracted(extracted, tradePartners, current));
         setExtractionFailed(!hasContent);
+        setSourceFile(source === "file" ? file : null);
         setStep("confirm");
       } catch {
         setExtractionFailed(true);
         setSpokenTranscript(null);
         setFormData((current) => emptyForm(current.tradePartnerId, current.tradePartnerName));
+        setSourceFile(null);
         setStep("confirm");
       } finally {
         setIsExtracting(false);
@@ -340,6 +343,7 @@ export default function IntakePage() {
       setFormData((current) => applyExtracted(extracted, tradePartners, current));
       setExtractionFailed(!extractedDailyHasContent(extracted));
       setInterviewMode(null);
+      setSourceFile(null);
       setStep("confirm");
     },
     [tradePartners],
@@ -348,10 +352,12 @@ export default function IntakePage() {
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
     try {
+      const body = new FormData();
+      body.append("daily", JSON.stringify({ projectId, ...formData }));
+      if (sourceFile) body.append("file", sourceFile);
       const res = await fetch("/api/intake/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, ...formData }),
+        body,
       });
       if (!res.ok) throw new Error("submit failed");
       setStep("success");
@@ -360,7 +366,7 @@ export default function IntakePage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [projectId, formData]);
+  }, [projectId, formData, sourceFile]);
 
   // ── Reset ────────────────────────────────────────────────────────────────
 
@@ -371,6 +377,7 @@ export default function IntakePage() {
     setCaptureSource(null);
     setInterviewMode(null);
     setFormData(emptyForm());
+    setSourceFile(null);
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────────

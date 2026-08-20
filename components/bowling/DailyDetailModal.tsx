@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,14 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Users, Clock, Wrench, FileText, AlertTriangle } from "lucide-react";
 import { DailyReport } from "@/types/hpproto";
+import {
+  DESTINATION_COOKIE,
+  parseDestinationJson,
+  type ProjectSightDestination,
+} from "@/lib/projectsight/destination";
 
 export interface BowlingCellDetail {
   date: string;
@@ -43,9 +49,66 @@ function formatDate(dateStr: string): string {
 }
 
 export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalProps) {
+  const [tidReady, setTidReady] = useState(false);
+  const [destination, setDestination] = useState<ProjectSightDestination | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const [sentId, setSentId] = useState<string | null>(null);
+  const [attached, setAttached] = useState(true);
+
+  useEffect(() => {
+    if (!open) return;
+    const raw = document.cookie
+      .split("; ")
+      .find((part) => part.startsWith(`${DESTINATION_COOKIE}=`));
+    setDestination(
+      raw
+        ? parseDestinationJson(decodeURIComponent(raw.slice(DESTINATION_COOKIE.length + 1)))
+        : null,
+    );
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data: { authenticated?: boolean; mode?: string }) => {
+        setTidReady(Boolean(data.authenticated && data.mode === "tid"));
+      })
+      .catch(() => setTidReady(false));
+    setSendError("");
+    setSentId(cell?.fullReport?.projectSightDailyId ?? null);
+    setAttached(true);
+  }, [open, cell?.fullReport?.projectSightDailyId]);
+
   if (!cell) return null;
 
   const report = cell.fullReport;
+  const hasFile = Boolean(report?.rawSourcePath);
+  const canSend = Boolean(
+    tidReady && destination?.portfolioId && destination.projectId && report?.id,
+  );
+
+  async function handleSend() {
+    if (!report?.id || !destination) return;
+    setSending(true);
+    setSendError("");
+    try {
+      const res = await fetch("/api/projectsight/dailyreports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          portfolioId: destination.portfolioId,
+          projectId: destination.projectId,
+          localDailyId: report.id,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Send failed");
+      setSentId(json.projectSightDailyId);
+      setAttached(Boolean(json.attached));
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Send failed");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -179,6 +242,43 @@ export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalP
                   })}
                 </p>
               )}
+
+              <div className="pt-2 border-t space-y-2">
+                {sentId && (
+                  <p className="text-xs text-muted-foreground">
+                    ProjectSight daily {sentId}
+                    {attached
+                      ? " · file attached"
+                      : hasFile
+                        ? " · file not attached"
+                        : " · created from spoken daily"}
+                  </p>
+                )}
+                {!hasFile && !sentId && (
+                  <p className="text-xs text-muted-foreground">
+                    Spoken daily — ProjectSight will get the narrative without a FOG 617 file.
+                  </p>
+                )}
+                {!tidReady && (
+                  <p className="text-xs text-muted-foreground">
+                    Sign in with Trimble Identity to send this daily to ProjectSight.
+                  </p>
+                )}
+                {tidReady && !destination?.projectId && (
+                  <p className="text-xs text-muted-foreground">
+                    Pick a ProjectSight portfolio and project in the top bar.
+                  </p>
+                )}
+                {sendError && <p className="text-xs text-destructive">{sendError}</p>}
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={!canSend || sending}
+                  onClick={handleSend}
+                >
+                  {sending ? "Sending…" : "Send to ProjectSight"}
+                </Button>
+              </div>
             </>
           ) : (
             <p className="text-sm text-muted-foreground italic">

@@ -4,7 +4,7 @@ import { getSortedNavigationData, navigationData } from "./navigationData";
 describe("HPproto navigation", () => {
   it("only exposes projects, bowling, and trade intake", () => {
     const ids = navigationData.map((item) => item.id);
-    expect(ids).toEqual(["projects", "bowling-sheet", "trade-qr-intake"]);
+    expect(ids).toEqual(["projects", "bowling-sheet", "daily-report", "trade-qr-intake"]);
   });
 
   it("does not include leftover ProjectSight modules", () => {

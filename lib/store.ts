@@ -79,6 +79,39 @@ export function upsertDailyReport(report: DailyReport, filePath: string = DEFAUL
   return report;
 }
 
+export function getDailyReportById(
+  id: string,
+  filePath: string = DEFAULT_DB_PATH,
+): DailyReport | undefined {
+  return getStore(filePath).dailyReports.find((report) => report.id === id);
+}
+
+export interface ProjectSightSendMeta {
+  projectSightDailyId: string;
+  projectSightPortfolioId: string;
+  projectSightProjectId: string;
+  sentToProjectSightAt: string;
+}
+
+export function markDailySentToProjectSight(
+  id: string,
+  meta: ProjectSightSendMeta,
+  filePath: string = DEFAULT_DB_PATH,
+): DailyReport | undefined {
+  const store = getStore(filePath);
+  const index = store.dailyReports.findIndex((report) => report.id === id);
+  if (index < 0) {
+    return undefined;
+  }
+  const updated: DailyReport = {
+    ...store.dailyReports[index],
+    ...meta,
+  };
+  store.dailyReports[index] = updated;
+  saveStore(store, filePath);
+  return updated;
+}
+
 export function getBowlingMatrix(
   projectId: string,
   yearMonth: string,
@@ -120,6 +153,7 @@ export function getBowlingMatrix(
           workerCount: daily.workerCount,
           totalHours: daily.totalHours,
           staCompleted: daily.staCompleted,
+          fullReport: daily,
         });
       } else {
         cells.push({

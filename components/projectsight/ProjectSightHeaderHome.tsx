@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/tooltip";
 import { UserPopover } from "@/components/UserPopover";
 import { cn } from "@/lib/utils";
-import { usePathname } from "next/navigation";
 import ProjectSwitcher from "./ProjectSwitcher";
 
 interface ProjectSightHeaderHomeProps {
@@ -30,8 +29,6 @@ const ProjectSightHeaderHome = ({
 }: ProjectSightHeaderHomeProps) => {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const pathname = usePathname();
-  const isProjectPage = pathname !== "/" && pathname != null;
 
   useEffect(() => {
     setMounted(true);
@@ -77,13 +74,11 @@ const ProjectSightHeaderHome = ({
         </div>
       </div>
 
-      {isProjectPage && (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <Suspense fallback={null}>
-            <ProjectSwitcher />
-          </Suspense>
-        </div>
-      )}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <Suspense fallback={null}>
+          <ProjectSwitcher />
+        </Suspense>
+      </div>
 
       <div className="flex items-center space-x-1">
         <ModeToggle />

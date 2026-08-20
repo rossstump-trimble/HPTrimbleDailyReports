@@ -35,6 +35,11 @@ export interface DailyReport {
   staCompleted: boolean;
   emailRecipients: string[];
   rawSourceFileName?: string;
+  rawSourcePath?: string;
+  projectSightDailyId?: string;
+  projectSightPortfolioId?: string;
+  projectSightProjectId?: string;
+  sentToProjectSightAt?: string;
 }
 
 export interface BowlingCell {
@@ -47,6 +52,7 @@ export interface BowlingCell {
   workerCount?: number;
   totalHours?: number;
   staCompleted?: boolean;
+  fullReport?: DailyReport;
 }
 
 export interface BowlingMatrix {
