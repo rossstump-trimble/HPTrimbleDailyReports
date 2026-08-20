@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { getSortedNavigationData, navigationData } from "./navigationData";
 
 describe("HPproto navigation", () => {
-  it("only exposes projects, bowling, and trade intake", () => {
+  it("only exposes projects, dashboard, bowling, and trade intake", () => {
     const ids = navigationData.map((item) => item.id);
-    expect(ids).toEqual(["projects", "bowling-sheet", "trade-qr-intake"]);
+    expect(ids).toEqual(["projects", "dashboard", "bowling-sheet", "trade-qr-intake"]);
   });
 
   it("does not include leftover ProjectSight modules", () => {

@@ -1,5 +1,5 @@
 import { LucideIcon } from "lucide-react";
-import { LayoutGrid, TableProperties, QrCode } from "lucide-react";
+import { LayoutGrid, LayoutDashboard, TableProperties, QrCode } from "lucide-react";
 import { IconType } from "react-icons";
 
 export interface MenuItem {
@@ -21,6 +21,13 @@ export const navigationData: MenuItem[] = [
     icon: LayoutGrid,
     path: "/projects",
     order: 10,
+  },
+  {
+    id: "dashboard",
+    name: "Dashboard",
+    icon: LayoutDashboard,
+    path: "/projects/cys07/dashboard",
+    order: 15,
   },
   {
     id: "bowling-sheet",
