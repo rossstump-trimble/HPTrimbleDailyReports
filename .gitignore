@@ -14,6 +14,7 @@
 .env*.local
 env.local
 data/*-test-db.json
+data/hpproto-db.json
 out/
 /react_flow_example
 

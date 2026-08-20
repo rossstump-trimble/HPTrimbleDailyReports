@@ -1,7 +1,5 @@
-# IMPORTANT:
-# Always read project-sight.md before writing any code.
-# Always use the Supabase MCP to update the database
-# Always use the Modus MCP when updating the UI
-# After adding a major feature or completing a milestone, update project-sight.md.
-# Document the entire database schema in project-sight.md.
-# For new migrations, make sure to add them to the same file.
+# HP Demo Day prototype (bowling sheet + trade daily intake)
+
+Read LOCAL-DEV.md before starting the app.
+Do not use Trimble Identity on localhost.
+Keep UI work on a feature branch unless the user asks to push main.

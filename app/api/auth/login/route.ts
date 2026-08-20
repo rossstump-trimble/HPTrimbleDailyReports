@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isLocalAuthRequest } from "@/lib/auth-mode";
 import { generatePKCE, getTIDConfig } from "@/lib/tid-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const config = getTIDConfig();
   const searchParams = request.nextUrl.searchParams;
   const from = searchParams.get("from") || "/";
+
+  if (isLocalAuthRequest(request)) {
+    const localUrl = new URL("/api/auth/local", request.url);
+    localUrl.searchParams.set("from", from);
+    return NextResponse.redirect(localUrl);
+  }
+
+  const config = getTIDConfig();
 
   // Determine host dynamically if behind proxy
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "hp-trimble-lab.com";

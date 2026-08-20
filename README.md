@@ -1,6 +1,22 @@
 # ProjectSight Web Prototype
 
-A modern web application built with Next.js 14, featuring real-time collaboration, project management, and advanced UI components. This project showcases the next generation of construction project management tools.
+HP Demo Day prototype: ProjectSight-styled bowling sheet and trade daily intake.
+
+**Local UI work starts here:** [LOCAL-DEV.md](./LOCAL-DEV.md)
+
+- Localhost uses **no Trimble Identity** (`http://localhost:3000`).
+- TID is only for the VPN/VM (`hp-trimble-lab.com`).
+- Put UI edits on a branch and open a PR to `main`.
+
+## Getting Started (localhost)
+
+```bash
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). You are signed in as Local Developer automatically.
 
 ## Features
 

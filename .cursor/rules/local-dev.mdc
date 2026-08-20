@@ -1,0 +1,27 @@
+---
+description: Localhost HPproto UI — no Trimble Identity; branch then PR to main
+alwaysApply: true
+---
+
+# Local development protocol
+
+This repo is the HP Demo Day prototype UI (Next.js). Cursor setups follow `LOCAL-DEV.md` and `.cursor/skills/local-startup/SKILL.md`.
+
+## Default
+
+- Working directory: this app root (`package.json` here).
+- Start: `npm run dev`
+- UI: http://localhost:3000
+- Auth: local only. Auto-signed in as Local Developer.
+
+## Never on localhost
+
+- Trimble Identity / `id.trimble.com`
+- `TID_CLIENT_SECRET` in `.env.local`
+- Registering a localhost TID callback
+- Committing UI work directly to `main`
+
+## Always
+
+- Copy `.env.local.example` → `.env.local` if missing (`AUTH_MODE=local`)
+- Feature branch (`ui/`, `feat/`, `fix/`), then PR to `main` for VM deploy

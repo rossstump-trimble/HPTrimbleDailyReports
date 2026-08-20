@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -26,9 +26,31 @@ function LoginForm() {
 
   const [error, setError] = useState(urlError || "");
   const [loading, setLoading] = useState(false);
+  const [authMode, setAuthMode] = useState<"unknown" | "local" | "tid">("unknown");
   const [showManual, setShowManual] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/mode")
+      .then((res) => res.json())
+      .then((data: { mode?: string }) => {
+        if (cancelled) return;
+        if (data.mode === "local") {
+          setAuthMode("local");
+          window.location.replace(`/api/auth/local?from=${encodeURIComponent(from)}`);
+          return;
+        }
+        setAuthMode("tid");
+      })
+      .catch(() => {
+        if (!cancelled) setAuthMode("tid");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [from]);
 
   function handleTIDLogin() {
     setLoading(true);
@@ -64,6 +86,16 @@ function LoginForm() {
     }
   }
 
+  if (authMode === "unknown" || authMode === "local") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d1f33]">
+        <div className="text-white text-sm">
+          {authMode === "local" ? "Entering local development…" : "Loading…"}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0d1f33] px-4">
       <div className="w-full max-w-sm px-8 py-10 bg-white rounded-2xl shadow-2xl flex flex-col items-center gap-6">
@@ -86,7 +118,6 @@ function LoginForm() {
           </div>
         )}
 
-        {/* Primary Trimble Identity Button */}
         <div className="w-full flex flex-col gap-3">
           <button
             type="button"
@@ -101,7 +132,6 @@ function LoginForm() {
           </button>
         </div>
 
-        {/* Optional Password toggle */}
         <div className="w-full pt-2 border-t border-gray-100 flex flex-col items-center">
           <button
             type="button"

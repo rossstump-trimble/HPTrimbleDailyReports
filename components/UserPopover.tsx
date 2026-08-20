@@ -8,8 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { User, RefreshCw, LogOut, ChevronDown, Users } from "lucide-react";
-import Link from "next/link";
+import { LogOut, ChevronDown } from "lucide-react";
 import { users } from "@/data/users";
 
 export function UserPopover() {
@@ -80,32 +79,6 @@ export function UserPopover() {
             <p className="text-xs text-muted-foreground">{currentUser.email}</p>
           </div>
         </div>
-
-        <Separator />
-
-        {/* Navigation links */}
-        <div className="p-1.5 space-y-0.5">
-          <Link href="/profile" className="popover-menu-item">
-            <User className="h-4 w-4 text-muted-foreground shrink-0" />
-            My Profile
-          </Link>
-          <Link href="/teams" className="popover-menu-item">
-            <Users className="h-4 w-4 text-muted-foreground shrink-0" />
-            My Teams
-          </Link>
-        </div>
-
-        <Separator />
-
-        {/* Actions */}
-        <div className="p-1.5 space-y-0.5">
-          <button type="button" className="popover-menu-item">
-            <RefreshCw className="h-4 w-4 text-muted-foreground shrink-0" />
-            Check for updated license
-          </button>
-        </div>
-
-        <Separator />
 
         <div className="p-1.5">
           <button

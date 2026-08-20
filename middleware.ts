@@ -1,35 +1,43 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isLocalAuthRequest } from "@/lib/auth-mode";
+import { applyLocalAuthCookies, hasLocalOrTidSession } from "@/lib/local-session";
 
-const AUTH_COOKIE = "ps-proto-auth";
-
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Always allow login, auth callback, and public auth endpoints through
-  if (
+function isPublicPath(pathname: string): boolean {
+  return (
     pathname === "/login" ||
     pathname.startsWith("/api/login") ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/auth/") ||
-    pathname === "/logout"
-  ) {
+    pathname === "/logout" ||
+    pathname.startsWith("/intake") ||
+    pathname.startsWith("/api/intake")
+  );
+}
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Check for a valid auth cookie (either prototype auth or TID session)
-  const authed =
-    request.cookies.get(AUTH_COOKIE)?.value === "1" ||
-    request.cookies.has("ps_session");
+  if (isLocalAuthRequest(request)) {
+    const response = NextResponse.next();
+    if (!hasLocalOrTidSession(request)) {
+      applyLocalAuthCookies(response);
+    }
+    return response;
+  }
+
+  const authed = hasLocalOrTidSession(request);
 
   if (!authed) {
     const loginUrl = new URL("/login", request.url);
-    // Pass the original destination so we can redirect back after login
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Authenticated — add CORS headers and continue
   const response = NextResponse.next();
   response.headers.set("Access-Control-Allow-Origin", "*");
   response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -44,7 +52,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on all routes except Next.js internals, static files, and public assets
-    "/((?!_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|ico|webp|woff2?|ttf|otf|css|js|pdf)$|images/|fonts/|logos/|drawings/|specs/).*)",
+    "/((?!_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|ico|webp|woff2?|ttf|otf|css|js|pdf)$|images/|fonts/|logos/).*)",
   ],
 };
