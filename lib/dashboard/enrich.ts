@@ -175,11 +175,9 @@ function buildCell(
     statusOverride = TODAY_STORY[tradeId] as CellStatus;
   }
 
-  const onsite = statusOverride === "na"
-    ? false
-    : statusOverride
-      ? statusOverride !== "na"
-      : isTradeOnsite(tradeId, date, isWeekend, weekendWorkChance, seed);
+  const onsite = statusOverride
+    ? statusOverride !== "na"
+    : isTradeOnsite(tradeId, date, isWeekend, weekendWorkChance, seed);
 
   if (!onsite) {
     return { ...base, onsite: false, status: "na", manpower: null, hours: null, hasDelayClaim: false };
