@@ -1,0 +1,37 @@
+/.next
+/_instructions
+/node_modules
+/scripts
+/database tables context
+/_supabase/migrations/add_modified_by_to_folders.sql
+/_supabase/migrations/create_additional_folders.sql
+/_supabase/migrations/create_files_table.sql
+/_supabase/migrations/create_folder_permissions.sql
+/_supabase/migrations/update_entity_type_enum.sql
+.env.local
+.env.production
+.env
+.env*.local
+env.local
+data/*-test-db.json
+out/
+/react_flow_example
+
+_instructions/icon-font.min.css
+_instructions/tcw_svg.ttf
+_instructions/trimble_connect.css
+tables/files_rows.csv
+tables/files_rows.sql
+tables/folder_permissions_rows.csv
+tables/folder_permissions_rows.sql
+tables/folders_rows.csv
+tables/folders_rows.sql
+tables/group_members_rows.csv
+tables/group_members_rows.sql
+tables/groups_rows.csv
+tables/groups_rows.sql
+tables/users_rows.csv
+tables/users_rows.sql
+tables/file_permissions_rows.csv
+tables/file_permissions_rows.sql
+tables/file_permissions_rows (1).sql

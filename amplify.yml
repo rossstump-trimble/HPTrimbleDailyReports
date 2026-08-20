@@ -1,0 +1,29 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci --cache .npm --prefer-offline
+        # Set deployment date and ensure environment variables
+        - echo "NEXT_PUBLIC_DEPLOYMENT_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> .env
+        - echo "NEXT_PUBLIC_DEPLOYMENT_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> .env.production
+        # Verify GEMINI_API_KEY is available
+        - if [ -z "$GEMINI_API_KEY" ]; then echo "GEMINI_API_KEY is not set"; exit 1; fi
+        # Set higher memory limit for Node
+        - export NODE_OPTIONS="--max-old-space-size=4096"
+    build:
+      commands:
+        - env | grep -e NEXT_PUBLIC_ -e GEMINI_API_KEY >> .env.production
+        - npm run build
+  artifacts:
+    # Main Next.js app artifacts
+    baseDirectory: .next
+    files:
+      - "**/*"
+      - "../app/api/**/*" # Include API routes from source
+      - "../.env.production" # Include environment file
+  cache:
+    paths:
+      - .next/cache/**/*
+      - .npm/**/*
+      - node_modules/**/*

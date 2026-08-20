@@ -1,0 +1,267 @@
+@import "@trimble-oss/moduswebcomponents/modus-wc-styles.css";
+@import url("https://cdn.jsdelivr.net/npm/@trimble-oss/modus-icons@1/dist/modus-outlined/fonts/modus-icons.css");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-montserrat: "Montserrat", sans-serif;
+    --font-sans: "Open Sans", sans-serif;
+
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 207.32 100% 24.12%;
+    --primary-foreground: 210 40% 98%;
+
+    /* New Trimble Connect blue */
+    --tc-blue: 204 71% 43%;
+    --tc-blue-hover: 204 71% 38%;
+    --tc-secondary: 224 6.61% 44.51%;
+    --tc-secondary-hover: 224 6.61% 38%;
+    --tc-secondary-toolbar: 216 12.2% 83.9%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.3rem;
+    --pco-border: #e8eaed;
+    --pco-row-border: #f3f4f6;
+    --chart-1: 221.2 83.2% 53.3%;
+    --chart-2: 212 95% 68%;
+    --chart-3: 216 92% 60%;
+    --chart-4: 210 98% 78%;
+    --chart-5: 212 97% 87%;
+    --footer-height: 441px;
+    --footer: 203.82 100% 25.69%;
+    --footer-foreground: 0 0% 100%;
+
+    /* Table-specific variables */
+    --table-header-bg: 0 0% 98%;
+    --table-header-hover-bg: 0 0% 96%;
+    --table-row-hover-bg: 0 0% 96%;
+    --table-selected-bg: 206 89% 93%;
+    --table-border: 214.3 31.8% 91.4%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+    --pco-border: rgba(255, 255, 255, 0.1);
+    --pco-row-border: rgba(255, 255, 255, 0.06);
+    --chart-1: 221.2 83.2% 53.3%;
+    --chart-2: 212 95% 68%;
+    --chart-3: 216 92% 60%;
+    --chart-4: 210 98% 78%;
+    --chart-5: 212 97% 87%;
+    /* Table-specific dark mode variables */
+    --table-header-bg: 222.2 84% 4.9%;
+    --table-header-hover-bg: 217.2 32.6% 12%;
+    --table-row-hover-bg: 217.2 32.6% 12%;
+    --table-selected-bg: 217.2 32.6% 25%;
+    --table-border: 217.2 32.6% 17.5%;
+  }
+}
+
+/* Lighter blue hover for ghost/borderless buttons in the header (light mode) */
+:root:not(.dark) header .modus-wc-btn {
+  --b2: 95% 0.03 220;
+  --b3: 89% 0.05 220;
+}
+
+/* Native ghost icon button for header — matches Modus sm size, light blue hover */
+.header-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.header-icon-btn:hover {
+  background-color: hsl(204 71% 90%);
+}
+.dark .header-icon-btn:hover {
+  background-color: hsl(217 32% 20%);
+}
+
+/* Popover menu item — full-width, left-aligned, native button */
+.popover-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.625rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  text-decoration: none;
+}
+.popover-menu-item:hover {
+  background-color: hsl(var(--muted));
+}
+.popover-menu-item.destructive {
+  color: hsl(0 84.2% 60.2%);
+}
+.popover-menu-item.destructive:hover {
+  background-color: hsl(0 84.2% 97%);
+  color: hsl(0 84.2% 60.2%);
+}
+.dark .popover-menu-item.destructive:hover {
+  background-color: hsl(0 62.8% 12%);
+}
+
+modus-wc-card.modus-wc-card {
+  margin-bottom: var(--modus-wc-spacing-xl, 1rem);
+}
+modus-wc-card p {
+  margin-bottom: 0;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.pco-light-border,
+.pco-light-border *,
+.pco-light-border th,
+.pco-light-border td,
+.pco-light-border tr {
+  border-color: var(--pco-border) !important;
+}
+
+.pco-light-row-border,
+.pco-light-row-border *,
+.pco-light-row-border th,
+.pco-light-row-border td,
+.pco-light-row-border tr {
+  border-color: var(--pco-row-border) !important;
+}
+
+.container {
+  @apply mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl;
+}
+
+/* Schedule gradient utilities — used on buttons and Gantt bars */
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.85) 100%);
+  }
+  .gradient-secondary {
+    background: linear-gradient(135deg, hsl(var(--muted-foreground) / 0.5) 0%, hsl(var(--muted-foreground) / 0.35) 100%);
+  }
+  .gradient-warm {
+    background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+  }
+  .gradient-success {
+    background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+  }
+}
+
+/* ── Mobile prototype: overlay scrollbars, no scrollbar track ── */
+.mobile-frame *::-webkit-scrollbar {
+  display: none;
+}
+.mobile-frame * {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Add these styles */
+.react-flow__node {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.react-flow__node-default {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+/* Custom class for ProjectSight Explorer integration */
+.assistant-margins-disabled.mr-\[400px\],
+.assistant-margins-disabled.mr-\[600px\] {
+  margin-right: 0 !important;
+}
+
+/* Keep the selection pane margin */
+.assistant-margins-disabled.mr-\[300px\] {
+  margin-right: 300px !important;
+}
+
+/* Add support for height transitions */
+@layer utilities {
+  .transition-height {
+    transition-property: height;
+  }
+  
+  /* Line clamp utilities */
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+  
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+}
