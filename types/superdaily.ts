@@ -12,6 +12,24 @@ export interface TradeFavor {
   type: TradeFavorType;
 }
 
+export interface SuperdailyWeather {
+  temp: number;
+  tempMax?: number;
+  tempMin?: number;
+  conditions: string;
+  humidity: number;
+  windVelocity: number;
+  rainfall: number;
+  snowfall: number;
+  weatherNotes: string;
+}
+
+export interface MissingTradePartner {
+  tradePartnerId: string;
+  tradePartnerName: string;
+  category?: string;
+}
+
 export interface TradeWorkSummary {
   tradePartnerId: string;
   tradePartnerName: string;
@@ -37,12 +55,15 @@ export interface SuperdailyReport {
   projectName: string;
   date: string; // YYYY-MM-DD
   generatedAt: string;
+  weather?: SuperdailyWeather;
   executiveSummary: string;
   totalHeadcount: number;
   totalManHours: number;
   activeTradeCount: number;
+  expectedTradeCount: number;
+  missingTrades: MissingTradePartner[];
   tradeSummaries: TradeWorkSummary[];
-  interTradeFavors: TradeFavor[];
+  interTradeFavors?: TradeFavor[];
   delaysAndRoadblocks: string[];
   safetyAndStas: SuperdailySafety;
   weatherSummary?: string;
