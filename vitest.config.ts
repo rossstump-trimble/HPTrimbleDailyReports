@@ -4,6 +4,9 @@ import path from 'path';
 export default defineConfig({
   test: {
     environment: 'node',
+    environmentMatchGlobs: [
+      ['**/*.test.tsx', 'jsdom'],
+    ],
   },
   resolve: {
     alias: {
