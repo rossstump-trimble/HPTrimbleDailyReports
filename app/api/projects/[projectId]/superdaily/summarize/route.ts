@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getProjectById, getStore } from '@/lib/store';
 import { synthesizeSuperdaily } from '@/lib/superdaily';
+import { fetchWeatherForDate } from '@/lib/weather-service';
 import { cookies } from 'next/headers';
 import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import { SESSION_COOKIE } from '@/lib/local-session';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { listDailyReports } from '@/lib/projectsight/client';
 import type { DailyReport } from '@/types/hpproto';
+import type { MissingTradePartner, SuperdailyWeather } from '@/types/superdaily';
 
 export const runtime = 'nodejs';
 
@@ -79,7 +81,57 @@ export async function POST(req: Request, { params }: { params: { projectId: stri
       // Fallback cleanly to local store
     }
 
-    const superdaily = await synthesizeSuperdaily(projectId, project.name, date, mergedReports);
+    // 1. Fetch weather observations
+    let weather: SuperdailyWeather | undefined;
+    try {
+      const normalizedWeather = await fetchWeatherForDate(date, project.lat, project.lon, project.name);
+      weather = {
+        temp: normalizedWeather.temp,
+        tempMax: normalizedWeather.tempMax,
+        tempMin: normalizedWeather.tempMin,
+        conditions: normalizedWeather.conditions,
+        humidity: normalizedWeather.humidity,
+        windVelocity: normalizedWeather.windVelocity,
+        rainfall: normalizedWeather.rainfall,
+        snowfall: normalizedWeather.snowfall,
+        weatherNotes: normalizedWeather.weatherNotes,
+      };
+    } catch (weatherErr) {
+      console.warn('[superdaily] Weather fetch failed, proceeding without weather', weatherErr);
+    }
+
+    // 2. Cross-reference bowling sheet active trade partners against submitted reports
+    const excludedSet = new Set((project.excludedTradePartnerIds || []).map((x) => x.toLowerCase()));
+    const expectedPartners = (project.tradePartners || []).filter(
+      (tp) =>
+        !excludedSet.has(tp.id.toLowerCase()) &&
+        !excludedSet.has(tp.name.toLowerCase()),
+    );
+
+    const submittedTradeIds = new Set(mergedReports.map((r) => r.tradePartnerId.toLowerCase()));
+    const submittedTradeNames = new Set(mergedReports.map((r) => r.tradePartnerName.toLowerCase()));
+
+    const missingTrades: MissingTradePartner[] = expectedPartners
+      .filter(
+        (tp) =>
+          !submittedTradeIds.has(tp.id.toLowerCase()) &&
+          !submittedTradeNames.has(tp.name.toLowerCase()),
+      )
+      .map((tp) => ({
+        tradePartnerId: tp.id,
+        tradePartnerName: tp.name,
+        category: tp.category,
+      }));
+
+    const superdaily = await synthesizeSuperdaily(
+      projectId,
+      project.name,
+      date,
+      mergedReports,
+      weather,
+      missingTrades,
+      expectedPartners.length || mergedReports.length,
+    );
 
     return NextResponse.json({
       success: true,

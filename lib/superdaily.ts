@@ -1,9 +1,10 @@
 import { geminiGenerate, GEMINI_TEXT_MODEL } from '@/lib/gemini-client';
 import type { DailyReport } from '@/types/hpproto';
 import type {
+  MissingTradePartner,
   SuperdailyReport,
+  SuperdailyWeather,
   TradeFavor,
-  TradeFavorType,
   TradeWorkSummary,
 } from '@/types/superdaily';
 
@@ -15,7 +16,7 @@ export function buildSuperdailyPrompt(
   const reportsText = reports
     .map(
       (r, i) => `
-Trade ${i + 1}: ${r.tradePartnerName}
+Trade ${i + 1}: ${r.tradePartnerName} (ID: ${r.tradePartnerId})
 Location: ${r.locationDescription || 'Not specified'}
 Workers: ${r.workerCount} | Hours: ${r.totalHours}
 Equipment: ${r.equipment?.join(', ') || 'None'}
@@ -32,20 +33,18 @@ Individual Subcontractor Reports:
 ${reportsText}
 
 Requirements:
-1. Executive Summary: A concise, authoritative overview of the jobsite tempo, major milestones achieved, and areas of high activity.
-2. Inter-Trade Favors & Coordination: Scrutinize all subcontractor notes for instances of mutual aid, equipment sharing (e.g. boom lifts, scissor lifts, crane time), shared access, material staging handoffs, or manpower coordination.
-3. Delays & Roadblocks: Explicitly call out any delays, material shortages, or weather disruptions noted by trades.
+1. Executive Summary: A concise, authoritative overview of the jobsite tempo, major milestones achieved, areas of high activity, and general site progress.
+2. Individual Subcontractor Work Performed: Provide an expanded, professional, multi-sentence technical narrative for EACH subcontractor describing exact activities, systems installed, locations, progress rate, and equipment utilized. Do NOT truncate or summarize into brief one-liners.
+3. Delays & Roadblocks: Explicitly call out any delays, material shortages, access issues, or weather disruptions noted by trades.
 4. Safety & STAs: Summarize safety meeting / STA compliance.
 
 Return ONLY a valid JSON object matching this schema:
 {
   "executiveSummary": "string",
-  "interTradeFavors": [
+  "tradeWorkNarratives": [
     {
-      "providingTrade": "string",
-      "receivingTrade": "string",
-      "description": "string",
-      "type": "equipment_sharing" | "material_handling" | "access_handover" | "manpower_assist" | "general"
+      "tradePartnerId": "string",
+      "workPerformed": "Detailed, multi-sentence technical description of all tasks and installations completed by this trade today."
     }
   ],
   "delaysAndRoadblocks": ["string"],
@@ -53,51 +52,14 @@ Return ONLY a valid JSON object matching this schema:
 }`;
 }
 
-export function extractInterTradeFavorsFromNotes(reports: DailyReport[]): TradeFavor[] {
-  const favors: TradeFavor[] = [];
-  const favorRegex = /(loaned|borrowed|shared|assisted|helped|handed over|crane hoist|boom lift|scissor lift|staging)/i;
-
-  for (const r of reports) {
-    const notes = r.notes || '';
-    if (favorRegex.test(notes)) {
-      let type: TradeFavorType = 'general';
-      if (/lift|crane|equipment|generator|forklift/i.test(notes)) {
-        type = 'equipment_sharing';
-      } else if (/staging|laydown|material|unloaded/i.test(notes)) {
-        type = 'material_handling';
-      } else if (/handover|handed over|access|cleared space/i.test(notes)) {
-        type = 'access_handover';
-      } else if (/assisted|helped|crew|manpower/i.test(notes)) {
-        type = 'manpower_assist';
-      }
-
-      // Detect potential trade mentioned in notes
-      let otherTrade = 'Subcontractor';
-      for (const other of reports) {
-        if (other.id !== r.id && notes.toLowerCase().includes(other.tradePartnerName.toLowerCase())) {
-          otherTrade = other.tradePartnerName;
-          break;
-        }
-      }
-
-      const isBorrowing = /borrowed|received|got access/i.test(notes);
-      favors.push({
-        providingTrade: isBorrowing ? otherTrade : r.tradePartnerName,
-        receivingTrade: isBorrowing ? r.tradePartnerName : otherTrade,
-        description: notes.slice(0, 160),
-        type,
-      });
-    }
-  }
-
-  return favors;
-}
-
 export function synthesizeDeterministicFallback(
   projectId: string,
   projectName: string,
   date: string,
   reports: DailyReport[],
+  weather?: SuperdailyWeather,
+  missingTrades: MissingTradePartner[] = [],
+  expectedTradeCount: number = reports.length + missingTrades.length,
 ): SuperdailyReport {
   let totalHeadcount = 0;
   let totalManHours = 0;
@@ -110,8 +72,12 @@ export function synthesizeDeterministicFallback(
     if (!r.staCompleted) allStas = false;
 
     if (r.notes && /delay|waiting|blocked|rain|mud|shortage/i.test(r.notes)) {
-      delays.push(`${r.tradePartnerName}: ${r.notes.slice(0, 120)}`);
+      delays.push(`${r.tradePartnerName}: ${r.notes.slice(0, 140)}`);
     }
+
+    const verboseWork = r.notes
+      ? `${r.notes} Crews operated actively in ${r.locationDescription || 'designated site areas'}${r.equipment && r.equipment.length > 0 ? ` utilizing ${r.equipment.join(', ')}` : ''}.`
+      : `Subcontractor executed designated scope of work at ${r.locationDescription || 'assigned site location'} with ${r.workerCount || 1} craftspersons.`;
 
     return {
       tradePartnerId: r.tradePartnerId,
@@ -119,14 +85,12 @@ export function synthesizeDeterministicFallback(
       workerCount: r.workerCount || 0,
       totalHours: r.totalHours || 0,
       locationDescription: r.locationDescription || 'Site general',
-      workPerformed: r.notes || 'Routine trade activities reported.',
+      workPerformed: verboseWork,
       equipment: r.equipment || [],
       staCompleted: Boolean(r.staCompleted),
       notes: r.notes,
     };
   });
-
-  const interTradeFavors = extractInterTradeFavorsFromNotes(reports);
 
   return {
     id: `superdaily-${projectId}-${date}-${Date.now()}`,
@@ -134,17 +98,20 @@ export function synthesizeDeterministicFallback(
     projectName,
     date,
     generatedAt: new Date().toISOString(),
-    executiveSummary: `On ${date}, ${reports.length} subcontractor trades reported on site with a total manpower of ${totalHeadcount} workers logging ${totalManHours} man-hours. Operations proceeded smoothly across designated work zones with ${interTradeFavors.length} noted instances of inter-trade equipment sharing and logistics coordination.`,
+    weather,
+    executiveSummary: `On ${date}, ${reports.length} of ${expectedTradeCount} subcontractor trade partners submitted daily reports with an active on-site workforce of ${totalHeadcount} craftspersons logging ${totalManHours} man-hours. Operations focused on primary work packages with no critical jobsite incidents reported.`,
     totalHeadcount,
     totalManHours,
     activeTradeCount: reports.length,
+    expectedTradeCount,
+    missingTrades,
     tradeSummaries,
-    interTradeFavors,
+    interTradeFavors: [],
     delaysAndRoadblocks: delays,
     safetyAndStas: {
       allCompleted: allStas,
       staNotes: allStas
-        ? 'All on-site subcontractors confirmed completion of morning STAs and safety briefings.'
+        ? 'All reporting subcontractors confirmed completion of morning STAs and safety briefings.'
         : 'One or more trade partners logged incomplete or unconfirmed STA safety checklists.',
       incidentsReported: false,
     },
@@ -157,18 +124,45 @@ export function parseSuperdailyResponse(
   projectName: string,
   date: string,
   reports: DailyReport[],
+  weather?: SuperdailyWeather,
+  missingTrades: MissingTradePartner[] = [],
+  expectedTradeCount: number = reports.length + missingTrades.length,
 ): SuperdailyReport {
-  const fallback = synthesizeDeterministicFallback(projectId, projectName, date, reports);
+  const fallback = synthesizeDeterministicFallback(
+    projectId,
+    projectName,
+    date,
+    reports,
+    weather,
+    missingTrades,
+    expectedTradeCount,
+  );
+
   try {
     const clean = jsonText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     const parsed = JSON.parse(clean);
 
+    const updatedSummaries = fallback.tradeSummaries.map((summary) => {
+      const match = Array.isArray(parsed.tradeWorkNarratives)
+        ? parsed.tradeWorkNarratives.find(
+            (n: { tradePartnerId?: string; workPerformed?: string }) =>
+              n.tradePartnerId?.toLowerCase() === summary.tradePartnerId.toLowerCase(),
+          )
+        : null;
+
+      if (match?.workPerformed) {
+        return {
+          ...summary,
+          workPerformed: match.workPerformed,
+        };
+      }
+      return summary;
+    });
+
     return {
       ...fallback,
       executiveSummary: parsed.executiveSummary || fallback.executiveSummary,
-      interTradeFavors: Array.isArray(parsed.interTradeFavors) && parsed.interTradeFavors.length > 0
-        ? parsed.interTradeFavors
-        : fallback.interTradeFavors,
+      tradeSummaries: updatedSummaries,
       delaysAndRoadblocks: Array.isArray(parsed.delaysAndRoadblocks)
         ? parsed.delaysAndRoadblocks
         : fallback.delaysAndRoadblocks,
@@ -187,9 +181,20 @@ export async function synthesizeSuperdaily(
   projectName: string,
   date: string,
   reports: DailyReport[],
+  weather?: SuperdailyWeather,
+  missingTrades: MissingTradePartner[] = [],
+  expectedTradeCount: number = reports.length + missingTrades.length,
 ): Promise<SuperdailyReport> {
   if (reports.length === 0) {
-    return synthesizeDeterministicFallback(projectId, projectName, date, []);
+    return synthesizeDeterministicFallback(
+      projectId,
+      projectName,
+      date,
+      [],
+      weather,
+      missingTrades,
+      expectedTradeCount,
+    );
   }
 
   const prompt = buildSuperdailyPrompt(projectName, date, reports);
@@ -201,11 +206,28 @@ export async function synthesizeSuperdaily(
     });
 
     if (res?.text) {
-      return parseSuperdailyResponse(res.text, projectId, projectName, date, reports);
+      return parseSuperdailyResponse(
+        res.text,
+        projectId,
+        projectName,
+        date,
+        reports,
+        weather,
+        missingTrades,
+        expectedTradeCount,
+      );
     }
   } catch (err) {
     console.warn('[superdaily] Gemini synthesis failed, falling back to deterministic mode', err);
   }
 
-  return synthesizeDeterministicFallback(projectId, projectName, date, reports);
+  return synthesizeDeterministicFallback(
+    projectId,
+    projectName,
+    date,
+    reports,
+    weather,
+    missingTrades,
+    expectedTradeCount,
+  );
 }
