@@ -10,6 +10,8 @@ describe("HPproto navigation", () => {
       "companies",
       "bowling-sheet",
       "review-queue",
+      "punch-list",
+      "inspections",
       "daily-report",
     ]);
   });
