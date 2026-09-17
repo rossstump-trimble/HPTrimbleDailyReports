@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   ListTodo,
   QrCode,
+  Sparkles,
   TableProperties,
 } from "lucide-react";
 import { IconType } from "react-icons";
@@ -50,6 +51,13 @@ export function getNavigationItemsForProject(projectId: string = "1025"): MenuIt
       icon: TableProperties,
       path: `/projects/${projectId}/bowling`,
       order: 20,
+    },
+    {
+      id: "superdaily",
+      name: "Superdaily",
+      icon: Sparkles,
+      path: `/projects/${projectId}/superdaily`,
+      order: 21,
     },
     {
       id: "review-queue",

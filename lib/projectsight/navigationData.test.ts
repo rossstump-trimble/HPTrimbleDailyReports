@@ -9,6 +9,7 @@ describe("HPproto navigation", () => {
       "dashboard",
       "companies",
       "bowling-sheet",
+      "superdaily",
       "review-queue",
       "punch-list",
       "inspections",
