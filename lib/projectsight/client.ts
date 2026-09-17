@@ -63,6 +63,36 @@ export function projectSightHeaders(accessToken: string): Record<string, string>
   };
 }
 
+export function summarizeDailyRecord(payload: unknown): Record<string, unknown> {
+  if (Array.isArray(payload) && payload[0]) {
+    return summarizeDailyRecord(payload[0]);
+  }
+  if (!payload || typeof payload !== 'object') {
+    return { empty: true };
+  }
+  const raw = payload as Record<string, unknown>;
+  const nested = raw.Items ?? raw.items ?? raw.data;
+  if (nested && nested !== payload) {
+    return summarizeDailyRecord(nested);
+  }
+  const comments = Array.isArray(raw.RecordComments) ? raw.RecordComments : [];
+  const works = Array.isArray(raw.DailyWorks) ? raw.DailyWorks : [];
+  const weatherNotes = String(raw.WeatherNotes ?? '');
+  const firstComment =
+    comments[0] && typeof comments[0] === 'object'
+      ? String((comments[0] as { Comments?: unknown }).Comments ?? '')
+      : '';
+  return {
+    DailyReportID: raw.DailyReportID ?? raw.DailyReportId ?? raw.Id,
+    Date: raw.Date,
+    WorkflowState: raw.WorkflowState,
+    weatherNotesChars: weatherNotes.length,
+    commentCount: comments.length,
+    dailyWorkCount: works.length,
+    preview: (weatherNotes || firstComment).slice(0, 160),
+  };
+}
+
 export function extractCreatedDailyId(payload: unknown): string {
   if (Array.isArray(payload) && payload[0] && typeof payload[0] === 'object') {
     return extractCreatedDailyId(payload[0]);
@@ -126,25 +156,271 @@ export async function listProjects(
   })).filter((row) => row.id);
 }
 
+export async function listDailyReports(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+): Promise<Record<string, unknown>[]> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports`,
+    {
+      method: 'GET',
+      headers: projectSightHeaders(accessToken),
+    },
+  );
+  return items(payload);
+}
+
+export async function getDailyReport(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+  dailyId: string,
+): Promise<Record<string, unknown>> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports/${dailyId}`,
+    {
+      method: 'GET',
+      headers: projectSightHeaders(accessToken),
+    },
+  );
+  return (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
+}
+
+export async function listCompanies(
+  accessToken: string,
+  portfolioId: string,
+  projectId?: string,
+): Promise<Record<string, unknown>[]> {
+  // ProjectSight companies endpoint is at the portfolio level: /{portfolioId}/Companies
+  // Response rows may include Contacts and Addresses arrays when the API returns them.
+  try {
+    const payload = await psFetch(
+      `${projectSightBaseUrl()}/${portfolioId}/Companies`,
+      {
+        method: 'GET',
+        headers: projectSightHeaders(accessToken),
+      },
+    );
+    const result = items(payload);
+    if (result.length > 0) return result;
+  } catch (err) {
+    console.warn('[projectsight] portfolio-level listCompanies failed, trying project level:', err);
+  }
+
+  if (projectId) {
+    try {
+      const payload = await psFetch(
+        `${projectSightBaseUrl()}/${portfolioId}/${projectId}/Companies`,
+        {
+          method: 'GET',
+          headers: projectSightHeaders(accessToken),
+        },
+      );
+      return items(payload);
+    } catch {
+      // fallback
+    }
+  }
+  return [];
+}
+
+export async function listCompaniesWithContacts(
+  accessToken: string,
+  portfolioId: string,
+  projectId?: string,
+): Promise<Record<string, unknown>[]> {
+  return listCompanies(accessToken, portfolioId, projectId);
+}
+
+function resolveCompanyAddressId(company: Record<string, unknown>): number {
+  const addresses = Array.isArray(company.Addresses) ? company.Addresses : [];
+  const first = addresses[0];
+  if (first && typeof first === 'object') {
+    const id = caseGet(first as Record<string, unknown>, ['AddressID', 'AddressId', 'Id', 'id']);
+    if (id != null && id !== '') {
+      const n = Number(id);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return 1;
+}
+
+export async function createProjectSightCompanyContact(
+  accessToken: string,
+  portfolioId: string,
+  companyId: number,
+  contact: {
+    firstName: string;
+    lastName: string;
+    email?: string;
+    title?: string;
+    phone?: string;
+    addressId?: number;
+  },
+): Promise<Record<string, unknown>> {
+  let addressId = contact.addressId;
+  if (addressId == null) {
+    const companyPayload = await psFetch(
+      `${projectSightBaseUrl()}/${portfolioId}/Companies/${companyId}`,
+      {
+        method: 'GET',
+        headers: projectSightHeaders(accessToken),
+      },
+    );
+    const company =
+      companyPayload && typeof companyPayload === 'object'
+        ? (Array.isArray(companyPayload)
+            ? ((companyPayload[0] as Record<string, unknown> | undefined) ?? {})
+            : (companyPayload as Record<string, unknown>))
+        : {};
+    addressId = resolveCompanyAddressId(company);
+  }
+
+  const contactRow: Record<string, unknown> = {
+    AddressID: addressId,
+    FirstName: contact.firstName,
+    LastName: contact.lastName,
+    IsActive: true,
+  };
+  if (contact.email != null) contactRow.EMail = contact.email;
+  if (contact.title != null) contactRow.Title = contact.title;
+  if (contact.phone != null) contactRow.Tel = contact.phone;
+
+  const payload = await psFetch(`${projectSightBaseUrl()}/${portfolioId}/Companies`, {
+    method: 'POST',
+    headers: projectSightHeaders(accessToken),
+    body: JSON.stringify({
+      CompanyID: companyId,
+      Contacts: [contactRow],
+    }),
+  });
+
+  const raw =
+    payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+  const contacts = Array.isArray(raw.Contacts) ? raw.Contacts : [];
+  const matched = contacts.find((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const c = row as Record<string, unknown>;
+    return (
+      String(caseGet(c, ['FirstName', 'firstName']) ?? '') === contact.firstName &&
+      String(caseGet(c, ['LastName', 'lastName']) ?? '') === contact.lastName
+    );
+  });
+  const created = matched ?? contacts[contacts.length - 1];
+  return (created && typeof created === 'object' ? created : raw) as Record<string, unknown>;
+}
+
+export async function listDrawings(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+): Promise<Record<string, unknown>[]> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/drawings`,
+    {
+      method: 'GET',
+      headers: projectSightHeaders(accessToken),
+    },
+  );
+  return items(payload);
+}
+
+export async function listRfis(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+): Promise<Record<string, unknown>[]> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/rfis`,
+    {
+      method: 'GET',
+      headers: projectSightHeaders(accessToken),
+    },
+  );
+  return items(payload);
+}
+
+export async function listSubmittals(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+): Promise<Record<string, unknown>[]> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/submittals`,
+    {
+      method: 'GET',
+      headers: projectSightHeaders(accessToken),
+    },
+  );
+  return items(payload);
+}
+
+export async function listPunchItems(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+): Promise<Record<string, unknown>[]> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/punchitems`,
+    {
+      method: 'GET',
+      headers: projectSightHeaders(accessToken),
+    },
+  );
+  return items(payload);
+}
+
 export async function createDailyReport(
   accessToken: string,
   portfolioId: string,
   projectId: string,
   body: Record<string, unknown>,
-): Promise<{ id: string }> {
+): Promise<{ id: string; payload: unknown }> {
+  // Safety rule: strip any record identifiers so this function can only CREATE new Daily Reports
+  const createPayload = { ...body };
+  delete createPayload.DailyReportID;
+  delete createPayload.DailyReportId;
+  delete createPayload.Id;
+  delete createPayload.id;
+  delete createPayload.KeyID;
+  delete createPayload.WorkflowState;
+
+  const comments = Array.isArray(createPayload.RecordComments) ? createPayload.RecordComments : [];
+  const works = Array.isArray(createPayload.DailyWorks) ? createPayload.DailyWorks : [];
+  const labor = Array.isArray(createPayload.DailyLabor) ? createPayload.DailyLabor : [];
+  const equip = Array.isArray(createPayload.DailyEquipment) ? createPayload.DailyEquipment : [];
+  console.error('[projectsight] create daily payload', {
+    date: createPayload.Date,
+    subject: createPayload.Subject ?? createPayload.Title ?? null,
+    dailyWorkCount: works.length,
+    dailyLaborCount: labor.length,
+    dailyEquipmentCount: equip.length,
+    weatherNotesChars: String(createPayload.WeatherNotes ?? '').length,
+    generalNotesChars: String(createPayload.GeneralNotes ?? createPayload.Notes ?? '').length,
+    commentCount: comments.length,
+    commentChars: comments
+      .map((row) =>
+        row && typeof row === 'object' && 'Comments' in row
+          ? String((row as { Comments?: unknown }).Comments ?? '')
+          : '',
+      )
+      .join('\n').length,
+  });
   const payload = await psFetch(
     `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports`,
     {
       method: 'POST',
       headers: projectSightHeaders(accessToken),
-      body: JSON.stringify(body),
+      body: JSON.stringify(createPayload),
     },
   );
+  console.error('[projectsight] create daily response', summarizeDailyRecord(payload));
   const id = extractCreatedDailyId(payload);
   if (!id) {
     throw new ProjectSightHttpError(502, 'ProjectSight create did not return a daily id');
   }
-  return { id };
+  return { id, payload };
 }
 
 export async function attachDailyReportFile(

@@ -4,6 +4,8 @@ import {
   createDailyReport,
   attachDailyReportFile,
   extractCreatedDailyId,
+  listCompaniesWithContacts,
+  createProjectSightCompanyContact,
 } from './client';
 
 describe('extractCreatedDailyId', () => {
@@ -64,5 +66,72 @@ describe('client HTTP', () => {
   it('throws ProjectSightHttpError on 403', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 403, text: async () => 'nope' });
     await expect(listPortfolios('tok')).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('lists companies with contacts from portfolio Companies endpoint', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          Items: [
+            {
+              CompanyID: 10042,
+              Name: 'Titan Electric',
+              Contacts: [{ ContactID: 9901, FirstName: 'Jane', LastName: 'Doe' }],
+              Addresses: [{ AddressID: 5 }],
+            },
+          ],
+        }),
+    });
+
+    const result = await listCompaniesWithContacts('tok', 'port-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/port-1/Companies'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].Contacts).toEqual([
+      { ContactID: 9901, FirstName: 'Jane', LastName: 'Doe' },
+    ]);
+    expect(result[0].Addresses).toEqual([{ AddressID: 5 }]);
+  });
+
+  it('creates a company contact via ProjectSight Company POST update', async () => {
+    const createFetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          CompanyID: 10042,
+          Name: 'Titan Electric',
+          Contacts: [
+            {
+              ContactID: 9901,
+              FirstName: 'Jane',
+              LastName: 'Doe',
+              DisplayName: 'Jane Doe',
+              EMail: 'jane@titan.com',
+            },
+          ],
+        }),
+    });
+    global.fetch = createFetchMock;
+
+    const result = await createProjectSightCompanyContact(
+      'test-token',
+      'port-1',
+      10042,
+      { firstName: 'Jane', lastName: 'Doe', email: 'jane@titan.com', title: 'Foreman' },
+    );
+
+    expect(createFetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/port-1/Companies'),
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"FirstName":"Jane"'),
+      }),
+    );
+    expect(result).toBeDefined();
   });
 });
