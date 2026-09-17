@@ -15,11 +15,31 @@ export interface TradePartner {
   submitterName?: string;
 }
 
+export interface CompanyContact {
+  id: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  email?: string;
+  title?: string;
+  phone?: string;
+}
+
+export interface ProjectCompany {
+  id: string;
+  psCompanyId?: number;
+  name: string;
+  trade?: string;
+  isTracked: boolean;
+  contacts: CompanyContact[];
+}
+
 export interface Project {
   id: string;
   code: string;
   name: string;
   tradePartners: TradePartner[];
+  availableCompanies?: ProjectCompany[];
   createdAt: string;
   workingDays?: number[]; // [0..6], 0=Sun, 1=Mon, ..., 6=Sat. Default [1,2,3,4,5]
   tradeDayOverrides?: Record<string, 'onsite' | 'offsite'>; // Key: `${tradePartnerId}:${dateIso}`

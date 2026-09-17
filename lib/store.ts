@@ -8,6 +8,8 @@ import {
   BowlingCell,
   StoreData,
   TradePartner,
+  ProjectCompany,
+  CompanyContact,
   MAX_DAILY_REPORTS,
 } from '@/types/hpproto';
 import type { PunchItem, PunchCommitActionItem, PunchCommitResult } from '@/types/punch';
@@ -202,6 +204,121 @@ export function updateProjectTradePartners(
   }
   saveStore(store, filePath);
   return proj;
+}
+
+function syncTradePartnersFromCompanies(proj: Project): void {
+  proj.tradePartners = (proj.availableCompanies || [])
+    .filter(c => c.isTracked)
+    .map(c => ({ id: c.id, name: c.name, category: c.trade }));
+}
+
+export function getProjectCompanies(
+  projectId: string,
+  filePath: string = DEFAULT_DB_PATH,
+): ProjectCompany[] {
+  const store = getStore(filePath);
+  const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return [];
+
+  if (proj.availableCompanies === undefined) {
+    proj.availableCompanies = (proj.tradePartners || []).map(tp => ({
+      id: tp.id,
+      name: tp.name,
+      trade: tp.category,
+      isTracked: true,
+      contacts: [],
+    }));
+    saveStore(store, filePath);
+  }
+
+  return proj.availableCompanies;
+}
+
+export function setProjectCompanies(
+  projectId: string,
+  companies: ProjectCompany[],
+  filePath: string = DEFAULT_DB_PATH,
+): void {
+  const store = getStore(filePath);
+  const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return;
+
+  proj.availableCompanies = companies;
+  syncTradePartnersFromCompanies(proj);
+  saveStore(store, filePath);
+}
+
+export function toggleCompanyTracking(
+  projectId: string,
+  companyId: string,
+  isTracked: boolean,
+  filePath: string = DEFAULT_DB_PATH,
+): ProjectCompany[] {
+  const store = getStore(filePath);
+  const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return [];
+
+  if (proj.availableCompanies === undefined) {
+    proj.availableCompanies = (proj.tradePartners || []).map(tp => ({
+      id: tp.id,
+      name: tp.name,
+      trade: tp.category,
+      isTracked: true,
+      contacts: [],
+    }));
+  }
+
+  const company = proj.availableCompanies.find(c => c.id.toLowerCase() === companyId.toLowerCase());
+  if (company) {
+    company.isTracked = isTracked;
+  }
+  syncTradePartnersFromCompanies(proj);
+  saveStore(store, filePath);
+  return proj.availableCompanies;
+}
+
+export function addCompanyContact(
+  projectId: string,
+  companyId: string,
+  contact: CompanyContact,
+  filePath: string = DEFAULT_DB_PATH,
+): CompanyContact {
+  const store = getStore(filePath);
+  const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return contact;
+
+  if (proj.availableCompanies === undefined) {
+    proj.availableCompanies = (proj.tradePartners || []).map(tp => ({
+      id: tp.id,
+      name: tp.name,
+      trade: tp.category,
+      isTracked: true,
+      contacts: [],
+    }));
+  }
+
+  const company = proj.availableCompanies.find(c => c.id.toLowerCase() === companyId.toLowerCase());
+  if (!company) return contact;
+
+  const contactEmail = (contact.email || '').trim().toLowerCase();
+  const contactName = (contact.displayName || '').trim().toLowerCase();
+  const existingIndex = company.contacts.findIndex(c => {
+    if (c.id === contact.id) return true;
+    const email = (c.email || '').trim().toLowerCase();
+    const name = (c.displayName || '').trim().toLowerCase();
+    if (contactEmail && email && email === contactEmail) return true;
+    if (contactName && name && name === contactName) return true;
+    return false;
+  });
+
+  if (existingIndex >= 0) {
+    company.contacts[existingIndex] = { ...company.contacts[existingIndex], ...contact };
+  } else {
+    company.contacts.push(contact);
+  }
+
+  saveStore(store, filePath);
+  return contact;
 }
 
 export function removeTradePartnerFromProject(
@@ -770,4 +887,81 @@ export function batchCommitPunchItems(
     (p) => p.projectId.toLowerCase() === projectId.toLowerCase(),
   );
   return { success: failedCount === 0, createdCount, updatedCount, failedCount, items, errors };
+}
+
+export function getProjectCompanies(
+  projectId: string,
+  filePath: string = DEFAULT_DB_PATH,
+): ProjectCompany[] {
+  const proj = getProjectById(projectId, filePath);
+  return proj?.availableCompanies || [];
+}
+
+export function setProjectCompanies(
+  projectId: string,
+  companies: ProjectCompany[],
+  filePath: string = DEFAULT_DB_PATH,
+): Project | undefined {
+  const store = getStore(filePath);
+  const proj = store.projects.find((p) => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return undefined;
+  proj.availableCompanies = companies;
+  proj.tradePartners = companies
+    .filter((c) => c.isTracked)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      category: c.trade || 'Trade Partner',
+      contactEmail: c.contacts?.[0]?.email,
+    }));
+  saveStore(store, filePath);
+  return proj;
+}
+
+export function toggleCompanyTracking(
+  projectId: string,
+  companyId: string,
+  isTracked: boolean,
+  filePath: string = DEFAULT_DB_PATH,
+): Project | undefined {
+  const store = getStore(filePath);
+  const proj = store.projects.find((p) => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return undefined;
+  if (!proj.availableCompanies) proj.availableCompanies = [];
+  const comp = proj.availableCompanies.find(
+    (c) => c.id.toLowerCase() === companyId.toLowerCase(),
+  );
+  if (comp) {
+    comp.isTracked = isTracked;
+  }
+  proj.tradePartners = proj.availableCompanies
+    .filter((c) => c.isTracked)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      category: c.trade || 'Trade Partner',
+      contactEmail: c.contacts?.[0]?.email,
+    }));
+  saveStore(store, filePath);
+  return proj;
+}
+
+export function addCompanyContact(
+  projectId: string,
+  companyId: string,
+  contact: CompanyContact,
+  filePath: string = DEFAULT_DB_PATH,
+): Project | undefined {
+  const store = getStore(filePath);
+  const proj = store.projects.find((p) => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj || !proj.availableCompanies) return undefined;
+  const comp = proj.availableCompanies.find(
+    (c) => c.id.toLowerCase() === companyId.toLowerCase(),
+  );
+  if (comp) {
+    if (!comp.contacts) comp.contacts = [];
+    comp.contacts.push(contact);
+  }
+  saveStore(store, filePath);
+  return proj;
 }
