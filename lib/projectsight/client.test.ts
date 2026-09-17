@@ -99,39 +99,77 @@ describe('client HTTP', () => {
   });
 
   it('creates a company contact via ProjectSight Company POST update', async () => {
-    const createFetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () =>
-        JSON.stringify({
-          CompanyID: 10042,
-          Name: 'Titan Electric',
-          Contacts: [
-            {
-              ContactID: 9901,
-              FirstName: 'Jane',
-              LastName: 'Doe',
-              DisplayName: 'Jane Doe',
-              EMail: 'jane@titan.com',
-            },
-          ],
-        }),
-    });
-    global.fetch = createFetchMock;
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            CompanyID: 10042,
+            Name: 'Titan Electric',
+            Addresses: [{ AddressID: 55 }],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            CompanyID: 10042,
+            Name: 'Titan Electric',
+            Contacts: [
+              {
+                ContactID: 9901,
+                FirstName: 'Jane',
+                LastName: 'Doe',
+                DisplayName: 'Jane Doe',
+                EMail: 'jane@titan.com',
+                Title: 'Foreman',
+                Tel: '555-0100',
+              },
+            ],
+          }),
+      });
 
     const result = await createProjectSightCompanyContact(
       'test-token',
       'port-1',
       10042,
-      { firstName: 'Jane', lastName: 'Doe', email: 'jane@titan.com', title: 'Foreman' },
+      {
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@titan.com',
+        title: 'Foreman',
+        phone: '555-0100',
+      },
     );
 
-    expect(createFetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/port-1/Companies'),
-      expect.objectContaining({
-        method: 'POST',
-        body: expect.stringContaining('"FirstName":"Jane"'),
-      }),
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('/port-1/Companies/10042'),
+      expect.objectContaining({ method: 'GET' }),
     );
-    expect(result).toBeDefined();
+
+    const postCall = fetchMock.mock.calls[1];
+    expect(String(postCall[0])).toContain('/port-1/Companies');
+    expect(postCall[1]).toMatchObject({ method: 'POST' });
+    const postBody = JSON.parse(String(postCall[1]?.body));
+    expect(postBody).toEqual({
+      CompanyID: 10042,
+      Contacts: [
+        {
+          AddressID: 55,
+          FirstName: 'Jane',
+          LastName: 'Doe',
+          IsActive: true,
+          EMail: 'jane@titan.com',
+          Title: 'Foreman',
+          Tel: '555-0100',
+        },
+      ],
+    });
+
+    expect(result.ContactID).toBe(9901);
+    expect(result.FirstName).toBe('Jane');
   });
 });

@@ -376,7 +376,7 @@ export async function createDailyReport(
   portfolioId: string,
   projectId: string,
   body: Record<string, unknown>,
-): Promise<{ id: string; payload: unknown }> {
+): Promise<{ id: string; payload?: unknown }> {
   // Safety rule: strip any record identifiers so this function can only CREATE new Daily Reports
   const createPayload = { ...body };
   delete createPayload.DailyReportID;
