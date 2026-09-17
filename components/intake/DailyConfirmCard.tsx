@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { CrewEntry, DailyReport, TradePartner } from "@/types/hpproto";
 import { resolveTradePartner } from "@/lib/trade-partner";
+import { calculateCrewTotals } from "@/lib/crew-hours";
 
 // ─── Field helpers ────────────────────────────────────────────────────────────
 
@@ -97,6 +98,8 @@ interface DailyConfirmCardProps {
   submitDisabled?: boolean;
   attachedFiles?: File[];
   onAttachedFilesChange?: (files: File[]) => void;
+  staFiles?: File[];
+  onStaFilesChange?: (files: File[]) => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -138,6 +141,8 @@ export default function DailyConfirmCard({
   submitDisabled = false,
   attachedFiles,
   onAttachedFilesChange,
+  staFiles,
+  onStaFilesChange,
 }: DailyConfirmCardProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -182,39 +187,36 @@ export default function DailyConfirmCard({
 
   const updateCrew = (index: number, field: keyof CrewEntry, value: string | number) => {
     const updated = data.crewBreakdown.map((row, i) =>
-      i === index ? { ...row, [field]: field === "count" ? Number(value) : value } : row,
+      i === index ? { ...row, [field]: field === "craft" ? String(value) : Number(value) } : row,
     );
-    const totalWorkers = updated.reduce((s, r) => s + r.count, 0);
-    const hpp = currentHoursPerPerson;
+    const { workerCount, totalHours, updatedCrew } = calculateCrewTotals(updated);
     onChange({
       ...data,
-      crewBreakdown: updated,
-      workerCount: totalWorkers,
-      totalHours: Math.round(totalWorkers * hpp * 10) / 10,
+      crewBreakdown: updatedCrew,
+      workerCount,
+      totalHours,
     });
   };
 
   const addCrewRow = () => {
-    const updated = [...data.crewBreakdown, { craft: "", count: 1 }];
-    const totalWorkers = updated.reduce((s, r) => s + r.count, 0);
-    const hpp = currentHoursPerPerson;
+    const updated = [...data.crewBreakdown, { craft: "", count: 1, hoursPerWorker: 8.0, totalHours: 8.0 }];
+    const { workerCount, totalHours, updatedCrew } = calculateCrewTotals(updated);
     onChange({
       ...data,
-      crewBreakdown: updated,
-      workerCount: totalWorkers,
-      totalHours: Math.round(totalWorkers * hpp * 10) / 10,
+      crewBreakdown: updatedCrew,
+      workerCount,
+      totalHours,
     });
   };
 
   const removeCrewRow = (index: number) => {
     const updated = data.crewBreakdown.filter((_, i) => i !== index);
-    const totalWorkers = updated.reduce((s, r) => s + r.count, 0);
-    const hpp = currentHoursPerPerson;
+    const { workerCount, totalHours, updatedCrew } = calculateCrewTotals(updated);
     onChange({
       ...data,
-      crewBreakdown: updated,
-      workerCount: totalWorkers,
-      totalHours: Math.round(totalWorkers * hpp * 10) / 10,
+      crewBreakdown: updatedCrew,
+      workerCount,
+      totalHours,
     });
   };
 
@@ -448,11 +450,11 @@ export default function DailyConfirmCard({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <FieldLabel>Submitted By (Foreman / Lead)</FieldLabel>
+            <FieldLabel required>Reporter / Author (Foreman / Lead)</FieldLabel>
             <FieldInput
               value={data.submittedBy || ""}
               onChange={(v) => set("submittedBy", v)}
-              placeholder="e.g. John Doe, Foreman"
+              placeholder="e.g. Evan Grimm, Foreman"
             />
           </div>
           <div>
@@ -497,35 +499,60 @@ export default function DailyConfirmCard({
       {/* ── Crew breakdown ─────────────────────────────────────────────────── */}
       <Section title="Crew Breakdown">
         <div className="space-y-2">
+          {data.crewBreakdown.length > 0 && (
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 px-1">
+              <span className="flex-1">Craft / Role</span>
+              <span className="w-16 text-center">Workers</span>
+              <span className="w-20 text-center">Hrs/Worker</span>
+              <span className="w-16 text-right pr-2">Total</span>
+              <span className="w-6"></span>
+            </div>
+          )}
           {data.crewBreakdown.length === 0 && (
             <p className="text-xs text-gray-400 dark:text-gray-500 italic">No crew rows — add one below.</p>
           )}
-          {data.crewBreakdown.map((row, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={row.craft}
-                onChange={(e) => updateCrew(i, "craft", e.target.value)}
-                placeholder="Craft / Role"
-                className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-              />
-              <input
-                type="number"
-                min={0}
-                value={row.count}
-                onChange={(e) => updateCrew(i, "count", e.target.value)}
-                className="w-16 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-center text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
-              />
-              <button
-                type="button"
-                onClick={() => removeCrewRow(i)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
-                aria-label="Remove crew row"
-              >
-                <Minus size={16} />
-              </button>
-            </div>
-          ))}
+          {data.crewBreakdown.map((row, i) => {
+            const rowCount = Number(row.count) || 0;
+            const rowHpp = row.hoursPerWorker != null ? Number(row.hoursPerWorker) : 8.0;
+            const rowTotal = row.totalHours != null ? row.totalHours : Math.round(rowCount * rowHpp * 10) / 10;
+            return (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={row.craft}
+                  onChange={(e) => updateCrew(i, "craft", e.target.value)}
+                  placeholder="Craft / Role"
+                  className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={row.count}
+                  onChange={(e) => updateCrew(i, "count", e.target.value)}
+                  className="w-16 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-center text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={row.hoursPerWorker != null ? row.hoursPerWorker : 8.0}
+                  onChange={(e) => updateCrew(i, "hoursPerWorker", e.target.value)}
+                  className="w-20 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-2 text-sm text-center text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                />
+                <span className="w-16 text-right pr-2 text-xs font-semibold tabular-nums text-gray-600 dark:text-gray-300">
+                  {rowTotal}h
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeCrewRow(i)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+                  aria-label="Remove crew row"
+                >
+                  <Minus size={16} />
+                </button>
+              </div>
+            );
+          })}
         </div>
 
         <button
@@ -540,41 +567,15 @@ export default function DailyConfirmCard({
         <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
           <div>
             <FieldLabel>Total Workers</FieldLabel>
-            <FieldInput
-              type="number"
-              value={data.workerCount || derivedWorkerCount || ""}
-              onChange={(v) => {
-                const count = Number(v) || 0;
-                const hpp = currentHoursPerPerson;
-                onChange({
-                  ...data,
-                  workerCount: count,
-                  totalHours: Math.round(count * hpp * 10) / 10,
-                });
-              }}
-              placeholder="0"
-            />
+            <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-sm font-bold text-gray-800 dark:text-gray-100">
+              {data.workerCount || derivedWorkerCount || 0}
+            </div>
           </div>
           <div>
-            <FieldLabel>Hours per person</FieldLabel>
-            <FieldInput
-              type="number"
-              value={currentHoursPerPerson || ""}
-              onChange={(v) => {
-                const hpp = Number(v) || 0;
-                const wkrs = data.workerCount || derivedWorkerCount || 1;
-                onChange({
-                  ...data,
-                  totalHours: Math.round(hpp * wkrs * 10) / 10,
-                });
-              }}
-              placeholder="8"
-            />
-            {data.totalHours > 0 && (data.workerCount || derivedWorkerCount) > 1 && (
-              <span className="text-[11px] text-muted-foreground mt-0.5 block">
-                Total: {data.totalHours} crew hours ({data.workerCount || derivedWorkerCount} workers × {currentHoursPerPerson} hrs)
-              </span>
-            )}
+            <FieldLabel>Total Shift Hours</FieldLabel>
+            <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-sm font-bold text-blue-700 dark:text-blue-400">
+              {data.totalHours || 0} hrs
+            </div>
           </div>
         </div>
       </Section>
@@ -696,6 +697,22 @@ export default function DailyConfirmCard({
         </div>
       </Section>
 
+      {/* ── Trades & Favors ───────────────────────────────────────────────── */}
+      <Section title="Trades & Favors">
+        <div>
+          <FieldLabel>Favors / Assistance Done for Trade Partners</FieldLabel>
+          <FieldTextarea
+            value={data.tradesAndFavors ?? ""}
+            onChange={(v) => set("tradesAndFavors", v)}
+            placeholder="Record any favors, equipment loaned, staging help, or trade assistance done for trade partners today…"
+            rows={3}
+          />
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+            Keep track of favors, accommodations, and reciprocal trade assistance.
+          </p>
+        </div>
+      </Section>
+
       {/* ── Notes & delays ─────────────────────────────────────────────────── */}
       <Section title="Notes & Delays">
         <div>
@@ -750,6 +767,67 @@ export default function DailyConfirmCard({
           )}
         </div>
       </Section>
+
+      {/* ── Attached Documents & Photos ───────────────────────────────────── */}
+      {((attachedFiles && attachedFiles.length > 0) || (staFiles && staFiles.length > 0)) && (
+        <Section title="Uploaded Attachments">
+          {attachedFiles && attachedFiles.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Daily Report Captures ({attachedFiles.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {attachedFiles.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs text-gray-800 dark:text-gray-200"
+                  >
+                    <Paperclip size={13} className="text-blue-600 dark:text-blue-400" />
+                    <span className="max-w-[180px] truncate">{file.name}</span>
+                    {onAttachedFilesChange && (
+                      <button
+                        type="button"
+                        onClick={() => onAttachedFilesChange(attachedFiles.filter((_, i) => i !== idx))}
+                        className="text-gray-400 hover:text-red-500 transition-colors ml-1"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {staFiles && staFiles.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <span>📋</span> Safety Task Analysis (STA) Photos ({staFiles.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {staFiles.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-3 py-1.5 text-xs text-amber-900 dark:text-amber-200"
+                  >
+                    <Camera size={13} className="text-amber-600 dark:text-amber-400" />
+                    <span className="max-w-[180px] truncate">{file.name}</span>
+                    {onStaFilesChange && (
+                      <button
+                        type="button"
+                        onClick={() => onStaFilesChange(staFiles.filter((_, i) => i !== idx))}
+                        className="text-amber-400 hover:text-red-500 transition-colors ml-1"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
 
       {/* ── Action buttons ──────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 pt-1">
