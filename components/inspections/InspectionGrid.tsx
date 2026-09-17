@@ -1,0 +1,105 @@
+"use client";
+
+import React from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { InspectionStatusBadge } from './InspectionStatusBadge';
+import { ClipboardCheck, CheckCircle2, AlertTriangle } from 'lucide-react';
+import type { InspectionRecord } from '@/types/inspections';
+
+interface InspectionGridProps {
+  inspections: InspectionRecord[];
+  onSelectInspection: (inspection: InspectionRecord) => void;
+  selectedId?: string;
+}
+
+export function InspectionGrid({
+  inspections,
+  onSelectInspection,
+  selectedId,
+}: InspectionGridProps) {
+  if (inspections.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center border rounded-xl bg-card">
+        <ClipboardCheck className="h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-semibold text-foreground">No Inspections Yet</h3>
+        <p className="text-sm text-muted-foreground max-w-sm mt-1">
+          Scan a completed paper checklist sheet or sync with ProjectSight to populate inspection records.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <TableHead className="w-[120px] font-semibold">Record #</TableHead>
+            <TableHead className="font-semibold">Title</TableHead>
+            <TableHead className="font-semibold">Location</TableHead>
+            <TableHead className="w-[160px] font-semibold">Checklist Items</TableHead>
+            <TableHead className="w-[120px] font-semibold">Status</TableHead>
+            <TableHead className="w-[130px] font-semibold text-right">Updated</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {inspections.map((record) => {
+            const isSelected = record.id === selectedId;
+            const items = record.items || [];
+            const passed = items.filter((it) => it.result === 'Pass').length;
+            const failed = items.filter((it) => it.result === 'Fail').length;
+            const total = items.length;
+
+            return (
+              <TableRow
+                key={record.id}
+                onClick={() => onSelectInspection(record)}
+                className={`cursor-pointer transition-colors ${
+                  isSelected ? 'bg-primary/10 font-medium' : 'hover:bg-muted/50'
+                }`}
+              >
+                <TableCell className="font-mono font-semibold text-primary">
+                  {record.number}
+                </TableCell>
+                <TableCell>
+                  <div className="font-medium text-foreground">{record.title}</div>
+                  {record.inspectorName && (
+                    <div className="text-xs text-muted-foreground">Inspector: {record.inspectorName}</div>
+                  )}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {record.location || '—'}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-medium">
+                      {passed}/{total} Passed
+                    </span>
+                    {failed > 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-rose-600 dark:text-rose-400 font-semibold">
+                        <AlertTriangle className="h-3 w-3" /> {failed} Fail
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <InspectionStatusBadge status={record.status} />
+                </TableCell>
+                <TableCell className="text-right text-xs text-muted-foreground">
+                  {record.updatedAt ? new Date(record.updatedAt).toLocaleDateString() : '—'}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
