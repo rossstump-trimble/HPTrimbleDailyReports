@@ -55,6 +55,8 @@ export interface Project {
 export interface CrewEntry {
   craft: string;
   count: number;
+  hoursPerWorker?: number;
+  totalHours?: number;
 }
 
 export interface DailyReportAttachment {
@@ -63,6 +65,7 @@ export interface DailyReportAttachment {
   fileSize?: number;
   mimeType?: string;
   uploadedAt?: string;
+  category?: 'daily_capture' | 'sta_form';
 }
 
 export interface DailyReport {
@@ -81,11 +84,14 @@ export interface DailyReport {
   tierSubsSummary?: string;
   equipment: string[];
   notes: string;
+  tradesAndFavors?: string;
+  isHpEmployee?: boolean;
   staCompleted: boolean;
   emailRecipients: string[];
   rawSourceFileName?: string;
   rawSourcePath?: string;
   rawSourceFiles?: DailyReportAttachment[];
+  staFiles?: DailyReportAttachment[];
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   approvedAt?: string;
   approvedBy?: string;
