@@ -11,6 +11,7 @@ import {
   Camera,
   CheckCircle2,
   ChevronRight,
+  ClipboardCheck,
   FileEdit,
   FileSpreadsheet,
   ListOrdered,
