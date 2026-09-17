@@ -1,8 +1,18 @@
+import type { PunchItem } from '@/types/punch';
+
+export interface TierSubcontractor {
+  name: string;
+  workerCount: number;
+  trade?: string;
+}
+
 export interface TradePartner {
   id: string;
   name: string;
   contactEmail?: string;
   category?: string;
+  companyName?: string;
+  submitterName?: string;
 }
 
 export interface Project {
@@ -11,6 +21,11 @@ export interface Project {
   name: string;
   tradePartners: TradePartner[];
   createdAt: string;
+  workingDays?: number[]; // [0..6], 0=Sun, 1=Mon, ..., 6=Sat. Default [1,2,3,4,5]
+  tradeDayOverrides?: Record<string, 'onsite' | 'offsite'>; // Key: `${tradePartnerId}:${dateIso}`
+  excludedTradePartnerIds?: string[];
+  psPortfolioId?: string;
+  psProjectId?: string;
 }
 
 export interface CrewEntry {
@@ -30,12 +45,17 @@ export interface DailyReport {
   workerCount: number;
   totalHours: number;
   crewBreakdown: CrewEntry[];
+  tierSubcontractors?: TierSubcontractor[];
+  tierSubsSummary?: string;
   equipment: string[];
   notes: string;
   staCompleted: boolean;
   emailRecipients: string[];
   rawSourceFileName?: string;
   rawSourcePath?: string;
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
+  approvedAt?: string;
+  approvedBy?: string;
   projectSightDailyId?: string;
   projectSightPortfolioId?: string;
   projectSightProjectId?: string;
@@ -62,6 +82,7 @@ export interface BowlingMatrix {
   month: string; // YYYY-MM
   daysInMonth: number;
   tradePartners: TradePartner[];
+  workingDays: number[];
   rows: {
     tradePartner: TradePartner;
     cells: BowlingCell[];
@@ -74,4 +95,7 @@ export interface BowlingMatrix {
 export interface StoreData {
   projects: Project[];
   dailyReports: DailyReport[];
+  punchItems?: PunchItem[];
 }
+
+export const MAX_DAILY_REPORTS = 2000;
