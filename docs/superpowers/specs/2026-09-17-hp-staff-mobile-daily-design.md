@@ -20,7 +20,12 @@ When Hensel Phelps superintendents, project engineers, and field staff scan the 
 - **Omit STA Prompt:** HP staff daily intake will **never** ask for STA photos or forms.
 - **Default Compliance:** HP staff entries automatically have `staCompleted: true` (or omitted as non-subcontractor craft) and will not generate missing-STA alerts on bowling sheets or dashboards.
 
-### 3. Mobile-First UX Architecture (`app/intake/[projectId]/hp/page.tsx`)
+### 3. Direct ProjectSight Dispatch (No Approval Required)
+- **Immediate Auto-Approval:** HP staff daily reports bypass the pending approval queue entirely (`approvalStatus: "approved"`).
+- **Direct Dispatch to PS API:** Upon submission via `/api/intake/submit`, if `isHpEmployee === true`, the system dispatches the daily report and attached photos directly to ProjectSight via `sendFog617ToProjectSight`.
+- **Immediate Sync Status:** The record is stamped with `projectSightDailyId` and `sentToProjectSightAt` immediately, and the success screen indicates it was filed straight into ProjectSight.
+
+### 4. Mobile-First UX Architecture (`app/intake/[projectId]/hp/page.tsx`)
 - **Thumb-Friendly Touch Targets:** 44px+ touch targets, sticky bottom action bar, clean rounded cards.
 - **Hero Voice Site Walk:**
   - One-tap voice dictation button prominently positioned at the top.
