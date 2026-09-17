@@ -6,7 +6,13 @@ import type {
   InspectionRecord,
 } from '@/types/inspections';
 
-export function buildInspectionExtractionPrompt(knownChecklists?: InspectionRecord[]): string {
+export interface ImageDescriptor {
+  buffer: Buffer;
+  mimeType: string;
+  filename?: string;
+}
+
+export function buildInspectionExtractionPrompt(knownChecklists?: InspectionRecord[], pageCount: number = 1): string {
   const checklistsContext = knownChecklists?.length
     ? `KNOWN CHECKLISTS on this project (match against one of these by checklistNumber / title, and correlate each row to its itemNumber / prompt):\n${knownChecklists
         .map(
@@ -18,9 +24,13 @@ export function buildInspectionExtractionPrompt(knownChecklists?: InspectionReco
         .join('\n\n')}`
     : 'No active project checklists provided. Extract whatever checklist header and line items appear on the sheet.';
 
+  const multiPageGuidance = pageCount > 1
+    ? `\nIMPORTANT: The attached document consists of ${pageCount} sequential scanned pages of the SAME checklist form. Transcribe all line items across all ${pageCount} pages in sequence into a single continuous items array, preserving sequential itemNumber order from page 1 through page ${pageCount}.\n`
+    : '';
+
   return `You are an expert construction inspector and quality control auditor.
 Analyze the handwritten or printed inspection checklist document image/scan and extract all line items, checkboxes, handwritten remarks, inspector details, and overall inspection status.
-
+${multiPageGuidance}
 ${checklistsContext}
 
 For the document:
@@ -128,15 +138,34 @@ export function parseInspectionOcrResponse(
 }
 
 export async function extractInspectionSheet(
-  imageBuffer: Buffer,
-  mimeType: string,
-  filename: string,
+  imageOrImages: Buffer | ImageDescriptor[],
+  mimeTypeOrKnown?: string | InspectionRecord[],
+  filenameOrForce?: string | boolean,
   knownChecklists?: InspectionRecord[],
   forceFixture: boolean = false,
 ): Promise<InspectionExtractionResult> {
+  let images: ImageDescriptor[] = [];
+  let checklists: InspectionRecord[] | undefined;
+  let isFixture = forceFixture;
+
+  if (Array.isArray(imageOrImages)) {
+    images = imageOrImages;
+    checklists = Array.isArray(mimeTypeOrKnown) ? mimeTypeOrKnown : undefined;
+    isFixture = typeof filenameOrForce === 'boolean' ? filenameOrForce : Boolean(forceFixture);
+  } else {
+    images = [
+      {
+        buffer: imageOrImages,
+        mimeType: typeof mimeTypeOrKnown === 'string' ? mimeTypeOrKnown : 'image/jpeg',
+        filename: typeof filenameOrForce === 'string' ? filenameOrForce : 'sheet.jpg',
+      },
+    ];
+    checklists = knownChecklists;
+  }
+
   const mode = process.env.PROJECTSIGHT_MODE || '';
-  if (forceFixture || mode.toLowerCase() === 'fixture') {
-    const matched = (knownChecklists && knownChecklists[0]) || {
+  if (isFixture || mode.toLowerCase() === 'fixture') {
+    const matched = (checklists && checklists[0]) || {
       number: 'CK-0042',
       title: 'Pre-Pour Concrete Inspection',
       psRecordId: 'ck-fix-001',
@@ -167,20 +196,21 @@ export async function extractInspectionSheet(
       date: new Date().toISOString().split('T')[0],
       items,
       overallConfidence: 0.95,
-      rawVisionNotes: 'Fixture grounded inspection extraction',
+      rawVisionNotes: `Fixture grounded inspection extraction (${images.length} pages)`,
     };
   }
 
-  const prompt = buildInspectionExtractionPrompt(knownChecklists);
-  const parts: GeminiPart[] = [
-    { text: prompt },
-    {
+  const prompt = buildInspectionExtractionPrompt(checklists, images.length);
+  const parts: GeminiPart[] = [{ text: prompt }];
+
+  for (const img of images) {
+    parts.push({
       inlineData: {
-        mimeType: mimeType || 'image/jpeg',
-        data: imageBuffer.toString('base64'),
+        mimeType: img.mimeType || 'image/jpeg',
+        data: img.buffer.toString('base64'),
       },
-    },
-  ];
+    });
+  }
 
   try {
     const result = await geminiGenerate({
@@ -197,7 +227,7 @@ export async function extractInspectionSheet(
       };
     }
 
-    return parseInspectionOcrResponse(result.text, knownChecklists);
+    return parseInspectionOcrResponse(result.text, checklists);
   } catch (err) {
     return {
       title: 'Extraction error',

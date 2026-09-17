@@ -93,4 +93,14 @@ describe('inspection-ocr service', () => {
     expect(result.items.length).toBe(1);
     expect(result.items[0].result).toBe('Pass');
   });
+
+  it('extractInspectionSheet supports multiple sequential page images', async () => {
+    const images = [
+      { buffer: Buffer.from('page1-fake-data'), mimeType: 'image/jpeg', filename: 'page1.jpg' },
+      { buffer: Buffer.from('page2-fake-data'), mimeType: 'image/jpeg', filename: 'page2.jpg' },
+    ];
+    const result = await extractInspectionSheet(images, undefined, true);
+    expect(result.items.length).toBeGreaterThan(0);
+    expect(result.title).toBeDefined();
+  });
 });
