@@ -4,7 +4,7 @@ import path from 'path';
 import { getPunchItems, upsertPunchItem, batchCommitPunchItems } from './store';
 import type { PunchItem } from '@/types/punch';
 
-const TEST_DB = path.join(process.cwd(), 'data', 'test-punch-db.json');
+const TEST_DB = path.join(__dirname, '..', 'data', 'test-punch-db.json');
 
 describe('HPproto Punch List Local Store', () => {
   beforeEach(() => {

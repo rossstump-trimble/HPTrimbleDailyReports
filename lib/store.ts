@@ -847,38 +847,47 @@ export function batchCommitPunchItems(
   let failedCount = 0;
   const errors: string[] = [];
 
-  for (const action of actions) {
-    if (action.action === 'create') {
-      const partial = action.item ?? {};
-      const newItem: PunchItem = {
-        id: `punch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        projectId,
-        description: partial.description ?? '',
-        status: partial.status ?? 'open',
-        tradeName: partial.tradeName ?? '',
-        locationDescription: partial.locationDescription ?? '',
-        importance: partial.importance ?? 'normal',
-        ...partial,
-      };
-      store.punchItems.push(newItem);
-      createdCount++;
-    } else if (action.action === 'resolve' || action.action === 'reinspect') {
-      const target = store.punchItems.find(
-        (p) =>
-          p.projectId.toLowerCase() === projectId.toLowerCase() &&
-          (action.targetItemId ? p.id === action.targetItemId : p.itemNumber === action.targetItemNumber),
-      );
-      if (!target) {
-        failedCount++;
-        errors.push(`Item not found: ${action.targetItemId ?? action.targetItemNumber}`);
-        continue;
+  for (const actionItem of actions) {
+    switch (actionItem.action) {
+      case 'create': {
+        const partial = actionItem.item ?? {};
+        const { id: _unusedId, ...partialWithoutId } = partial;
+        const newItem: PunchItem = {
+          id: `punch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          projectId,
+          description: partialWithoutId.description ?? '',
+          status: partialWithoutId.status ?? 'open',
+          tradeName: partialWithoutId.tradeName ?? '',
+          locationDescription: partialWithoutId.locationDescription ?? '',
+          importance: partialWithoutId.importance ?? 'normal',
+          ...partialWithoutId,
+        };
+        store.punchItems.push(newItem);
+        createdCount++;
+        break;
       }
-      target.status = action.action === 'resolve' ? 'resolved' : 'reopened';
-      if (action.notes) target.resolutionNotes = action.notes;
-      updatedCount++;
-    } else {
-      failedCount++;
-      errors.push(`Unknown action: ${String((action as PunchCommitActionItem).action)}`);
+      case 'resolve':
+      case 'reinspect': {
+        const target = store.punchItems.find(
+          (p) =>
+            p.projectId.toLowerCase() === projectId.toLowerCase() &&
+            (actionItem.targetItemId ? p.id === actionItem.targetItemId : p.itemNumber === actionItem.targetItemNumber),
+        );
+        if (!target) {
+          failedCount++;
+          errors.push(`Item not found: ${actionItem.targetItemId ?? actionItem.targetItemNumber}`);
+          continue;
+        }
+        target.status = actionItem.action === 'resolve' ? 'resolved' : 'reopened';
+        if (actionItem.notes) target.resolutionNotes = actionItem.notes;
+        updatedCount++;
+        break;
+      }
+      default: {
+        const _exhaustive: never = actionItem.action;
+        failedCount++;
+        errors.push(`Unknown action: ${String(_exhaustive)}`);
+      }
     }
   }
 
