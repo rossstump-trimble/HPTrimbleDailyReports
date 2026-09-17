@@ -38,7 +38,7 @@ describe('ProjectSight Punch Item API Client', () => {
   });
 
   it('creates punch item via POST', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       text: async () => JSON.stringify({ PunchItemId: 'ps-new-1', Number: '0099' }),
     });
@@ -55,8 +55,8 @@ describe('ProjectSight Punch Item API Client', () => {
     );
   });
 
-  it('updates punch item status via PATCH/PUT', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+  it('updates punch item status via PUT', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       text: async () => JSON.stringify({ PunchItemId: 'ps-new-1', Status: 'Resolved' }),
     });
@@ -66,5 +66,9 @@ describe('ProjectSight Punch Item API Client', () => {
     });
 
     expect(res.id).toBe('ps-new-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/port-1/proj-1/punchitems/ps-new-1'),
+      expect.objectContaining({ method: 'PUT' }),
+    );
   });
 });

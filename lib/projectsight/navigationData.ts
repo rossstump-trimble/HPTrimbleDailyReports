@@ -3,6 +3,7 @@ import {
   Building2,
   ClipboardCheck,
   LayoutDashboard,
+  ListTodo,
   QrCode,
   TableProperties,
 } from "lucide-react";
@@ -56,6 +57,13 @@ export function getNavigationItemsForProject(projectId: string = "1025"): MenuIt
       icon: ClipboardCheck,
       path: `/projects/${projectId}/review`,
       order: 22,
+    },
+    {
+      id: "punch-list",
+      name: "Punch List",
+      icon: ListTodo,
+      path: `/projects/${projectId}/punch-list`,
+      order: 23,
     },
     {
       id: "daily-report",
