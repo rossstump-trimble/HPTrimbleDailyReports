@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
-import { Open_Sans } from "next/font/google";
+import { Open_Sans, Roboto } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ModusProviders } from "@/components/ModusProviders";
+import { FeedbackWidgetProvider } from "@/components/feedback/FeedbackWidgetProvider";
 import { cn } from "@/lib/utils";
 
-const openSans = Open_Sans({ subsets: ["latin"] });
+const openSans = Open_Sans({ subsets: ["latin"], variable: "--font-open-sans" });
+const roboto = Roboto({
+  weight: ["400", "500", "700", "900"],
+  subsets: ["latin"],
+  variable: "--font-roboto",
+});
 
 export const metadata: Metadata = {
-  title: "HP Demo Day — Daily Intake",
-  description: "Trade daily intake and bowling sheet prototype",
+  title: "HP Daily Reporting",
+  description: "Hensel Phelps Daily Reporting & Compliance",
   icons: {
     icon: "/images/favicon.ico",
     shortcut: "/images/favicon.ico",
@@ -35,7 +41,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={cn("min-h-screen bg-background font-sans antialiased", openSans.className)}>
+      <body className={cn("min-h-screen bg-background font-sans antialiased", openSans.variable, roboto.variable)}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
@@ -46,6 +52,7 @@ export default function RootLayout({
           <ModusProviders>
             {children}
             <Toaster />
+            <FeedbackWidgetProvider />
           </ModusProviders>
         </ThemeProvider>
       </body>
