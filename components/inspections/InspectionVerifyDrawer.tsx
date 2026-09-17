@@ -33,7 +33,9 @@ interface InspectionVerifyDrawerProps {
   onClose: () => void;
   projectId: string;
   extraction: InspectionExtractionResult | null;
-  previewUrl: string | null;
+  previewUrl?: string | null;
+  previewUrls?: string[] | null;
+  targetInspectionId?: string;
   inspections: InspectionRecord[];
   onCommitSuccess: (committed: InspectionRecord) => void;
 }
@@ -44,18 +46,31 @@ export function InspectionVerifyDrawer({
   projectId,
   extraction,
   previewUrl,
+  previewUrls,
+  targetInspectionId,
   inspections,
   onCommitSuccess,
 }: InspectionVerifyDrawerProps) {
   const [items, setItems] = useState<ExtractedInspectionItem[]>([]);
   const [selectedInspectionId, setSelectedInspectionId] = useState<string>('');
+  const [activePageIndex, setActivePageIndex] = useState<number>(0);
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
 
+  const urls = (previewUrls && previewUrls.length > 0)
+    ? previewUrls
+    : (previewUrl ? [previewUrl] : []);
+
   // Sync state when extraction changes
   React.useEffect(() => {
+    setActivePageIndex(0);
     if (extraction) {
       setItems(extraction.items || []);
+
+      if (targetInspectionId) {
+        setSelectedInspectionId(targetInspectionId);
+        return;
+      }
 
       // Attempt to match with existing inspection
       let matched = inspections.find(
@@ -72,7 +87,7 @@ export function InspectionVerifyDrawer({
         setSelectedInspectionId(matched.id);
       }
     }
-  }, [extraction, inspections]);
+  }, [extraction, inspections, targetInspectionId]);
 
   if (!extraction) return null;
 
@@ -112,7 +127,7 @@ export function InspectionVerifyDrawer({
           result: it.result,
           comment: it.comment,
         })),
-        sheetImageBase64: previewUrl || undefined,
+        sheetImageBase64: urls[0] || previewUrl || undefined,
         imageFileName: `${extraction.checklistNumber || 'inspection'}_scan.jpg`,
       };
 
@@ -178,15 +193,35 @@ export function InspectionVerifyDrawer({
         <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
           {/* Left: Scanned Sheet Image Preview */}
           <div className="h-full overflow-y-auto p-4 bg-muted/20 flex flex-col items-center justify-start">
-            {previewUrl ? (
+            {urls.length > 0 ? (
               <div className="w-full flex flex-col items-center">
-                <div className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1 self-start">
-                  <Eye className="h-3.5 w-3.5" /> Scanned Physical Form
+                <div className="w-full flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                    <Eye className="h-3.5 w-3.5" /> Scanned Physical Form {urls.length > 1 ? `(${urls.length} Pages)` : ''}
+                  </div>
+                  {urls.length > 1 && (
+                    <div className="flex items-center gap-1">
+                      {urls.map((_, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                            activePageIndex === pIdx
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                          }`}
+                          onClick={() => setActivePageIndex(pIdx)}
+                        >
+                          Page {pIdx + 1}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={previewUrl}
-                  alt="Scanned Inspection Sheet"
+                  src={urls[activePageIndex] || urls[0]}
+                  alt={`Scanned Inspection Sheet Page ${activePageIndex + 1}`}
                   className="rounded-lg shadow-md border max-w-full object-contain"
                 />
               </div>
@@ -200,12 +235,16 @@ export function InspectionVerifyDrawer({
           {/* Right: Editable Extracted Checklist */}
           <div className="h-full overflow-y-auto p-4 space-y-4">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-muted-foreground">
-                Target ProjectSight Checklist Record
+              <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                <span>Target ProjectSight Checklist Record</span>
+                {targetInspectionId && (
+                  <Badge variant="outline" className="text-[10px]">Pre-associated</Badge>
+                )}
               </label>
               <select
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={selectedInspectionId}
+                disabled={Boolean(targetInspectionId)}
                 onChange={(e) => setSelectedInspectionId(e.target.value)}
               >
                 {inspections.map((ins) => (

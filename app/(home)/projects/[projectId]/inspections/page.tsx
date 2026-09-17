@@ -47,6 +47,8 @@ export default function InspectionsPage() {
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
   const [scanResult, setScanResult] = useState<InspectionExtractionResult | null>(null);
   const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
+  const [scanPreviewUrls, setScanPreviewUrls] = useState<string[]>([]);
+  const [scanTargetChecklistId, setScanTargetChecklistId] = useState<string | undefined>(undefined);
 
   const fetchInspections = useCallback(async () => {
     setLoading(true);
@@ -82,10 +84,26 @@ export default function InspectionsPage() {
     }
   };
 
-  const handleScanComplete = (result: InspectionExtractionResult, previewUrl: string) => {
+  const handleScanComplete = (
+    result: InspectionExtractionResult,
+    previewUrls: string[],
+    targetChecklistId?: string,
+  ) => {
     setScanResult(result);
-    setScanPreviewUrl(previewUrl);
+    setScanPreviewUrls(previewUrls);
+    setScanPreviewUrl(previewUrls[0] || null);
+    setScanTargetChecklistId(targetChecklistId);
     setIsVerifyOpen(true);
+  };
+
+  const handleCardScan = (record: InspectionRecord) => {
+    setScanTargetChecklistId(record.id);
+    setIsScanModalOpen(true);
+  };
+
+  const handleHeaderScan = () => {
+    setScanTargetChecklistId(undefined);
+    setIsScanModalOpen(true);
   };
 
   const handleCommitSuccess = (committed: InspectionRecord) => {
@@ -125,7 +143,7 @@ export default function InspectionsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <ClipboardCheck className="h-7 w-7 text-primary" />
-            Inspection Checklists
+            Checklists
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Digitize completed field inspection sheets, verify checkboxes and handwritten notes side-by-side, and push to ProjectSight.
@@ -146,7 +164,7 @@ export default function InspectionsPage() {
 
           <Button
             size="sm"
-            onClick={() => setIsScanModalOpen(true)}
+            onClick={handleHeaderScan}
             className="gap-2 min-h-[44px] sm:min-h-0 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-sm"
           >
             <Camera className="h-4 w-4" />
@@ -194,6 +212,7 @@ export default function InspectionsPage() {
         <InspectionGrid
           inspections={filtered}
           onSelectInspection={handleRowSelect}
+          onScanChecklist={handleCardScan}
         />
       )}
 
@@ -209,6 +228,8 @@ export default function InspectionsPage() {
         isOpen={isScanModalOpen}
         onClose={() => setIsScanModalOpen(false)}
         projectId={projectId}
+        inspections={inspections}
+        initialChecklistId={scanTargetChecklistId}
         onScanComplete={handleScanComplete}
       />
 
@@ -219,6 +240,8 @@ export default function InspectionsPage() {
         projectId={projectId}
         extraction={scanResult}
         previewUrl={scanPreviewUrl}
+        previewUrls={scanPreviewUrls}
+        targetInspectionId={scanTargetChecklistId}
         inspections={inspections}
         onCommitSuccess={handleCommitSuccess}
       />

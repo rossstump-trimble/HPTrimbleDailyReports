@@ -1,36 +1,32 @@
 "use client";
 
 import React from 'react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 import { InspectionStatusBadge } from './InspectionStatusBadge';
-import { ClipboardCheck, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ClipboardCheck, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import type { InspectionRecord } from '@/types/inspections';
 
 interface InspectionGridProps {
   inspections: InspectionRecord[];
   onSelectInspection: (inspection: InspectionRecord) => void;
+  onScanChecklist?: (inspection: InspectionRecord) => void;
   selectedId?: string;
 }
 
 export function InspectionGrid({
   inspections,
   onSelectInspection,
+  onScanChecklist,
   selectedId,
 }: InspectionGridProps) {
   if (inspections.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center border rounded-xl bg-card">
         <ClipboardCheck className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold text-foreground">No Inspections Yet</h3>
+        <h3 className="text-lg font-semibold text-foreground">No Checklists Yet</h3>
         <p className="text-sm text-muted-foreground max-w-sm mt-1">
-          Scan a completed paper checklist sheet or sync with ProjectSight to populate inspection records.
+          Scan a completed paper checklist sheet or sync with ProjectSight to populate checklist records.
         </p>
       </div>
     );
@@ -46,7 +42,8 @@ export function InspectionGrid({
             <TableHead className="font-semibold">Location</TableHead>
             <TableHead className="w-[160px] font-semibold">Checklist Items</TableHead>
             <TableHead className="w-[120px] font-semibold">Status</TableHead>
-            <TableHead className="w-[130px] font-semibold text-right">Updated</TableHead>
+            <TableHead className="w-[110px] font-semibold text-right">Updated</TableHead>
+            <TableHead className="w-[140px] font-semibold text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -94,6 +91,19 @@ export function InspectionGrid({
                 </TableCell>
                 <TableCell className="text-right text-xs text-muted-foreground">
                   {record.updatedAt ? new Date(record.updatedAt).toLocaleDateString() : '—'}
+                </TableCell>
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                  {onScanChecklist && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs font-medium border-primary/30 hover:bg-primary/10 text-primary"
+                      onClick={() => onScanChecklist(record)}
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                      Scan Sheet(s)
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             );
