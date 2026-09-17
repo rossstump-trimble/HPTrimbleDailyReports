@@ -423,6 +423,90 @@ export async function createDailyReport(
   return { id, payload };
 }
 
+export function normalizePunchItem(raw: Record<string, unknown>, projectId: string): PunchItem {
+  const id = String(caseGet(raw, ['PunchItemId', 'PunchItemID', 'Id', 'id', 'KeyID']) || '');
+  const itemNumber = String(caseGet(raw, ['ItemNumber', 'Number', 'ItemNo']) || '');
+  const description = String(caseGet(raw, ['Description', 'Subject', 'Title', 'Notes']) || 'No description');
+  const rawStatus = String(caseGet(raw, ['Status', 'State', 'WorkflowState']) || 'Open').toLowerCase();
+
+  let status: PunchStatus = 'open';
+  if (rawStatus.includes('resolv')) status = 'resolved';
+  else if (rawStatus.includes('close')) status = 'closed';
+  else if (rawStatus.includes('reopen')) status = 'reopened';
+
+  const rawImportance = String(caseGet(raw, ['Importance', 'Priority']) || 'Normal').toLowerCase();
+  let importance: PunchImportance = 'normal';
+  if (rawImportance.includes('low')) importance = 'low';
+  else if (rawImportance.includes('urgent')) importance = 'urgent';
+  else if (rawImportance.includes('high')) importance = 'high';
+
+  let locationDescription = '';
+  const loc = raw.Location;
+  if (loc && typeof loc === 'object') {
+    locationDescription = String((loc as Record<string, unknown>).Description || (loc as Record<string, unknown>).Name || '');
+  } else if (typeof raw.LocationDescription === 'string') {
+    locationDescription = raw.LocationDescription;
+  }
+
+  let tradeName = '';
+  const assigned = raw.AssignedToCompany ?? raw.Company ?? raw.AssignedTo;
+  if (assigned && typeof assigned === 'object') {
+    tradeName = String((assigned as Record<string, unknown>).Name || '');
+  } else if (typeof assigned === 'string') {
+    tradeName = assigned;
+  }
+
+  return {
+    id,
+    projectId,
+    itemNumber: itemNumber || undefined,
+    description,
+    status,
+    tradeName: tradeName || 'Unassigned',
+    locationDescription,
+    importance,
+    reportedDate: typeof raw.DateCreated === 'string' ? raw.DateCreated.slice(0, 10) : undefined,
+    psPunchId: id,
+  };
+}
+
+export async function createPunchItem(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+  body: Record<string, unknown>,
+): Promise<{ id: string; payload: unknown }> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/punchitems`,
+    {
+      method: 'POST',
+      headers: projectSightHeaders(accessToken),
+      body: JSON.stringify(body),
+    },
+  );
+  const id = String(caseGet(payload as Record<string, unknown>, ['PunchItemId', 'PunchItemID', 'Id', 'id']) || '');
+  return { id, payload };
+}
+
+export async function updatePunchItem(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+  punchItemId: string,
+  body: Record<string, unknown>,
+): Promise<{ id: string; payload: unknown }> {
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/punchitems/${punchItemId}`,
+    {
+      method: 'PUT',
+      headers: projectSightHeaders(accessToken),
+      body: JSON.stringify(body),
+    },
+  );
+  const id = String(caseGet(payload as Record<string, unknown>, ['PunchItemId', 'PunchItemID', 'Id', 'id']) || punchItemId);
+  return { id, payload };
+}
+
 export async function attachDailyReportFile(
   accessToken: string,
   portfolioId: string,
