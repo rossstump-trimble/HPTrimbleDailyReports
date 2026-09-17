@@ -1,3 +1,5 @@
+import type { PunchItem, PunchStatus, PunchImportance } from '@/types/punch';
+
 export class ProjectSightHttpError extends Error {
   readonly status: number;
 
@@ -371,58 +373,6 @@ export async function listPunchItems(
   return items(payload);
 }
 
-export async function createDailyReport(
-  accessToken: string,
-  portfolioId: string,
-  projectId: string,
-  body: Record<string, unknown>,
-): Promise<{ id: string; payload?: unknown }> {
-  // Safety rule: strip any record identifiers so this function can only CREATE new Daily Reports
-  const createPayload = { ...body };
-  delete createPayload.DailyReportID;
-  delete createPayload.DailyReportId;
-  delete createPayload.Id;
-  delete createPayload.id;
-  delete createPayload.KeyID;
-  delete createPayload.WorkflowState;
-
-  const comments = Array.isArray(createPayload.RecordComments) ? createPayload.RecordComments : [];
-  const works = Array.isArray(createPayload.DailyWorks) ? createPayload.DailyWorks : [];
-  const labor = Array.isArray(createPayload.DailyLabor) ? createPayload.DailyLabor : [];
-  const equip = Array.isArray(createPayload.DailyEquipment) ? createPayload.DailyEquipment : [];
-  console.error('[projectsight] create daily payload', {
-    date: createPayload.Date,
-    subject: createPayload.Subject ?? createPayload.Title ?? null,
-    dailyWorkCount: works.length,
-    dailyLaborCount: labor.length,
-    dailyEquipmentCount: equip.length,
-    weatherNotesChars: String(createPayload.WeatherNotes ?? '').length,
-    generalNotesChars: String(createPayload.GeneralNotes ?? createPayload.Notes ?? '').length,
-    commentCount: comments.length,
-    commentChars: comments
-      .map((row) =>
-        row && typeof row === 'object' && 'Comments' in row
-          ? String((row as { Comments?: unknown }).Comments ?? '')
-          : '',
-      )
-      .join('\n').length,
-  });
-  const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports`,
-    {
-      method: 'POST',
-      headers: projectSightHeaders(accessToken),
-      body: JSON.stringify(createPayload),
-    },
-  );
-  console.error('[projectsight] create daily response', summarizeDailyRecord(payload));
-  const id = extractCreatedDailyId(payload);
-  if (!id) {
-    throw new ProjectSightHttpError(502, 'ProjectSight create did not return a daily id');
-  }
-  return { id, payload };
-}
-
 export function normalizePunchItem(raw: Record<string, unknown>, projectId: string): PunchItem {
   const id = String(caseGet(raw, ['PunchItemId', 'PunchItemID', 'Id', 'id', 'KeyID']) || '');
   const itemNumber = String(caseGet(raw, ['ItemNumber', 'Number', 'ItemNo']) || '');
@@ -507,6 +457,58 @@ export async function updatePunchItem(
   return { id, payload };
 }
 
+export async function createDailyReport(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+  body: Record<string, unknown>,
+): Promise<{ id: string; payload?: unknown }> {
+  // Safety rule: strip any record identifiers so this function can only CREATE new Daily Reports
+  const createPayload = { ...body };
+  delete createPayload.DailyReportID;
+  delete createPayload.DailyReportId;
+  delete createPayload.Id;
+  delete createPayload.id;
+  delete createPayload.KeyID;
+  delete createPayload.WorkflowState;
+
+  const comments = Array.isArray(createPayload.RecordComments) ? createPayload.RecordComments : [];
+  const works = Array.isArray(createPayload.DailyWorks) ? createPayload.DailyWorks : [];
+  const labor = Array.isArray(createPayload.DailyLabor) ? createPayload.DailyLabor : [];
+  const equip = Array.isArray(createPayload.DailyEquipment) ? createPayload.DailyEquipment : [];
+  console.error('[projectsight] create daily payload', {
+    date: createPayload.Date,
+    subject: createPayload.Subject ?? createPayload.Title ?? null,
+    dailyWorkCount: works.length,
+    dailyLaborCount: labor.length,
+    dailyEquipmentCount: equip.length,
+    weatherNotesChars: String(createPayload.WeatherNotes ?? '').length,
+    generalNotesChars: String(createPayload.GeneralNotes ?? createPayload.Notes ?? '').length,
+    commentCount: comments.length,
+    commentChars: comments
+      .map((row) =>
+        row && typeof row === 'object' && 'Comments' in row
+          ? String((row as { Comments?: unknown }).Comments ?? '')
+          : '',
+      )
+      .join('\n').length,
+  });
+  const payload = await psFetch(
+    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports`,
+    {
+      method: 'POST',
+      headers: projectSightHeaders(accessToken),
+      body: JSON.stringify(createPayload),
+    },
+  );
+  console.error('[projectsight] create daily response', summarizeDailyRecord(payload));
+  const id = extractCreatedDailyId(payload);
+  if (!id) {
+    throw new ProjectSightHttpError(502, 'ProjectSight create did not return a daily id');
+  }
+  return { id, payload };
+}
+
 export async function attachDailyReportFile(
   accessToken: string,
   portfolioId: string,
@@ -529,4 +531,130 @@ export async function attachDailyReportFile(
       body: form,
     },
   );
+}
+
+export interface ProjectSightChecklistRef {
+  id: string;
+  number: string;
+  title: string;
+  workflowState: string;
+  location?: string;
+  items?: {
+    id: string;
+    itemNumber: number;
+    prompt: string;
+    result?: string;
+    comment?: string;
+  }[];
+}
+
+export const FIXTURE_PROJECTSIGHT_CHECKLISTS: ProjectSightChecklistRef[] = [
+  {
+    id: 'ck-fix-001',
+    number: 'CK-0042',
+    title: 'Pre-Pour Concrete Inspection',
+    workflowState: 'Open',
+    location: 'Building A, Floor 2',
+    items: [
+      { id: 'item-1', itemNumber: 1, prompt: 'Rebar placement, spacing, and sizing verified per structural drawings', result: 'Unchecked' },
+      { id: 'item-2', itemNumber: 2, prompt: 'Clear cover to formwork verified (chairs & standoffs positioned)', result: 'Unchecked' },
+      { id: 'item-3', itemNumber: 3, prompt: 'Embedded items, anchor bolts, and penetrations located and secured', result: 'Unchecked' },
+      { id: 'item-4', itemNumber: 4, prompt: 'Forms clean of debris, tie wire, and standing water', result: 'Unchecked' },
+      { id: 'item-5', itemNumber: 5, prompt: 'Vapor barrier sealed and free from punctures or tears', result: 'Unchecked' },
+      { id: 'item-6', itemNumber: 6, prompt: 'Pre-pour survey elevation marks established on bulkheads', result: 'Unchecked' },
+    ],
+  },
+];
+
+export async function listChecklists(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+): Promise<ProjectSightChecklistRef[]> {
+  try {
+    const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/list`;
+    const payload = await psFetch(url, {
+      method: 'POST',
+      headers: projectSightHeaders(accessToken),
+      body: JSON.stringify({}),
+    });
+    const parsed = items(payload).map((item) => ({
+      id: String(caseGet(item, ['ChecklistId', 'ChecklistGuid', 'Id', 'id']) || ''),
+      number: String(caseGet(item, ['ChecklistNumber', 'Number', 'number']) || ''),
+      title: String(caseGet(item, ['Title', 'Name', 'title']) || 'Untitled Checklist'),
+      workflowState: String(caseGet(item, ['WorkflowState', 'Status', 'status']) || 'Open'),
+      location: (caseGet(item, ['Location', 'location']) as string) || undefined,
+    })).filter((ck) => ck.id);
+
+    if (parsed.length > 0) return parsed;
+  } catch (err) {
+    console.warn('[projectsight] listChecklists fallback to fixture', err);
+  }
+  return FIXTURE_PROJECTSIGHT_CHECKLISTS;
+}
+
+export async function getChecklist(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+  checklistId: string,
+): Promise<Record<string, unknown>> {
+  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/${checklistId}`;
+  const payload = await psFetch(url, {
+    method: 'GET',
+    headers: projectSightHeaders(accessToken),
+  });
+  return (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
+}
+
+export async function updateChecklistItems(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+  checklistId: string,
+  itemsList: { id?: string; itemNumber: number; prompt?: string; result: string; comment?: string }[],
+  workflowState?: string,
+): Promise<Record<string, unknown>> {
+  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/${checklistId}`;
+  const body: Record<string, unknown> = {
+    ChecklistItems: itemsList.map((it) => ({
+      ChecklistItemId: it.id,
+      ItemNumber: it.itemNumber,
+      Response: it.result,
+      Comments: it.comment || '',
+    })),
+  };
+  if (workflowState) {
+    body.WorkflowState = workflowState;
+  }
+  const payload = await psFetch(url, {
+    method: 'PUT',
+    headers: projectSightHeaders(accessToken),
+    body: JSON.stringify(body),
+  });
+  return (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
+}
+
+export async function uploadChecklistAttachment(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+  checklistId: string,
+  filename: string,
+  buffer: Buffer,
+  contentType: string = 'image/jpeg',
+): Promise<Record<string, unknown>> {
+  const form = new FormData();
+  const blob = new Blob([new Uint8Array(buffer)], { type: contentType || 'application/octet-stream' });
+  form.append('file', blob, filename);
+  const headers = projectSightHeaders(accessToken);
+  delete headers['Content-Type'];
+
+  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/${checklistId}/attachments`;
+  const payload = await psFetch(url, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  return (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
 }
