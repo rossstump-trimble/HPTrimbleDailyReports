@@ -35,6 +35,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BowlingTable, BowlingRow } from "@/components/bowling/BowlingTable";
+import { MissingStaFollowUps } from "@/components/dashboard/MissingStaFollowUps";
+import type { DailyReport } from "@/types/hpproto";
 
 interface BowlingMatrixResponse {
   projectId: string;
@@ -563,14 +565,22 @@ export default function BowlingPage() {
                 </div>
               </div>
             ) : (
-              <BowlingTable
-                rows={data.rows}
-                daysInMonth={data.daysInMonth}
-                month={data.month}
-                projectId={projectId}
-                onRefresh={fetchData}
-                onDeleteCompany={handleDeleteCompany}
-              />
+              <div className="space-y-4">
+                <MissingStaFollowUps
+                  reports={(data.rows ?? []).flatMap((r) =>
+                    (r.cells ?? []).map((c) => c.fullReport).filter((f): f is DailyReport => Boolean(f)),
+                  )}
+                  month={data.month}
+                />
+                <BowlingTable
+                  rows={data.rows}
+                  daysInMonth={data.daysInMonth}
+                  month={data.month}
+                  projectId={projectId}
+                  onRefresh={fetchData}
+                  onDeleteCompany={handleDeleteCompany}
+                />
+              </div>
             )}
           </div>
         )}

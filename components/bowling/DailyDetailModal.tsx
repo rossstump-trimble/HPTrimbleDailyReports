@@ -10,11 +10,12 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Users, Clock, Wrench, FileText, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Users, Clock, Wrench, FileText, AlertTriangle, User, Camera, Paperclip } from "lucide-react";
 import { DailyReport } from "@/types/hpproto";
 import {
+  DEFAULT_DESTINATION,
   DESTINATION_COOKIE,
-  parseDestinationJson,
+  destinationFromCookieWithFallback,
   type ProjectSightDestination,
 } from "@/lib/projectsight/destination";
 
@@ -62,9 +63,7 @@ export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalP
       .split("; ")
       .find((part) => part.startsWith(`${DESTINATION_COOKIE}=`));
     setDestination(
-      raw
-        ? parseDestinationJson(decodeURIComponent(raw.slice(DESTINATION_COOKIE.length + 1)))
-        : null,
+      destinationFromCookieWithFallback(raw ? raw.slice(DESTINATION_COOKIE.length + 1) : null),
     );
     fetch("/api/auth/me")
       .then((res) => res.json())
@@ -80,31 +79,39 @@ export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalP
   if (!cell) return null;
 
   const report = cell.fullReport;
+  const hasSta = cell.staCompleted === true || Boolean(report?.staFiles && report.staFiles.length > 0);
   const hasFile = Boolean(report?.rawSourcePath);
   const canSend = Boolean(
     tidReady && destination?.portfolioId && destination.projectId && report?.id,
   );
 
   async function handleSend() {
-    if (!report?.id || !destination) return;
+    if (!report?.id) return;
     setSending(true);
     setSendError("");
     try {
-      const res = await fetch("/api/projectsight/dailyreports", {
+      const res = await fetch(`/api/dailyreports/${report.id}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          portfolioId: destination.portfolioId,
-          projectId: destination.projectId,
-          localDailyId: report.id,
+          portfolioId: destination?.portfolioId,
+          projectId: destination?.projectId,
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Send failed");
-      setSentId(json.projectSightDailyId);
-      setAttached(Boolean(json.attached));
+      if (!res.ok) throw new Error(json.error || "Approval failed");
+      if (json.projectSightDailyId) {
+        setSentId(json.projectSightDailyId);
+        setAttached(Boolean(json.attached));
+      }
+      if (cell?.fullReport) {
+        cell.fullReport.approvalStatus = "approved";
+        if (json.projectSightDailyId) {
+          cell.fullReport.projectSightDailyId = json.projectSightDailyId;
+        }
+      }
     } catch (err) {
-      setSendError(err instanceof Error ? err.message : "Send failed");
+      setSendError(err instanceof Error ? err.message : "Approval failed");
     } finally {
       setSending(false);
     }
@@ -144,24 +151,50 @@ export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalP
               <Clock className="h-3.5 w-3.5" />
               {cell.totalHours ?? 0}h total
             </Badge>
-            {cell.staCompleted ? (
+            {hasSta ? (
               <Badge
                 variant="secondary"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-50 text-green-800 border border-green-200 dark:bg-green-950 dark:text-green-200 dark:border-green-800"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                STA Completed
+                STA Completed {report?.staFiles && report.staFiles.length > 0 ? `(${report.staFiles.length} photos)` : ''}
               </Badge>
             ) : (
               <Badge
                 variant="secondary"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-50 text-orange-800 border border-orange-200 dark:bg-orange-950 dark:text-orange-200 dark:border-orange-800"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800"
               >
-                <XCircle className="h-3.5 w-3.5" />
-                STA Not Completed
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Missing STA Form
+              </Badge>
+            )}
+            {report?.submittedBy && (
+              <Badge
+                variant="outline"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <User className="h-3.5 w-3.5 text-blue-600" />
+                Reporter: {report.submittedBy}
               </Badge>
             )}
           </div>
+
+          {!hasSta && (
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-900 dark:text-amber-100">Missing STA Safety Form</p>
+                <p>
+                  No Safety Task Analysis photos were attached to this daily report.
+                  {report?.submittedBy && (
+                    <span className="block mt-0.5 font-medium text-amber-900 dark:text-amber-100">
+                      Original Reporter: {report.submittedBy}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
 
           {report ? (
             <>
@@ -244,9 +277,29 @@ export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalP
               )}
 
               <div className="pt-2 border-t space-y-2">
+                {/* Approval & Sync Status */}
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Review Status
+                  </span>
+                  {sentId ? (
+                    <Badge className="bg-emerald-600 text-white text-xs gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Approved &amp; Synced (PS #{sentId})
+                    </Badge>
+                  ) : report.approvalStatus === "approved" ? (
+                    <Badge className="bg-blue-600 text-white text-xs gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Approved Locally
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400 text-xs gap-1">
+                      <Clock className="h-3 w-3" /> Pending Superintendent Review
+                    </Badge>
+                  )}
+                </div>
+
                 {sentId && (
                   <p className="text-xs text-muted-foreground">
-                    ProjectSight daily {sentId}
+                    ProjectSight daily #{sentId}
                     {attached
                       ? " · file attached"
                       : hasFile
@@ -256,28 +309,36 @@ export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalP
                 )}
                 {!hasFile && !sentId && (
                   <p className="text-xs text-muted-foreground">
-                    Spoken daily — ProjectSight will get the narrative without a FOG 617 file.
+                    Field daily — ProjectSight will receive the structured narrative.
                   </p>
                 )}
-                {!tidReady && (
+                {!tidReady && !sentId && (
                   <p className="text-xs text-muted-foreground">
-                    Sign in with Trimble Identity to send this daily to ProjectSight.
+                    Sign in with Trimble Identity to dispatch directly to live ProjectSight upon approval.
                   </p>
                 )}
-                {tidReady && !destination?.projectId && (
+                {tidReady && !destination?.projectId && !sentId && (
                   <p className="text-xs text-muted-foreground">
-                    Pick a ProjectSight portfolio and project in the top bar.
+                    Defaulting to Hensel Phelps Demo Project ({destination?.portfolioId?.slice(0, 8)}… / {destination?.projectId}).
                   </p>
                 )}
                 {sendError && <p className="text-xs text-destructive">{sendError}</p>}
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={!canSend || sending}
-                  onClick={handleSend}
-                >
-                  {sending ? "Sending…" : "Send to ProjectSight"}
-                </Button>
+
+                {!sentId && (
+                  <Button
+                    type="button"
+                    className="w-full text-white font-semibold"
+                    style={{ backgroundColor: "#0063a3" }}
+                    disabled={sending}
+                    onClick={handleSend}
+                  >
+                    {sending
+                      ? "Approving & Syncing to ProjectSight…"
+                      : tidReady
+                        ? "Approve & Send to ProjectSight"
+                        : "Approve Daily Report"}
+                  </Button>
+                )}
               </div>
             </>
           ) : (
