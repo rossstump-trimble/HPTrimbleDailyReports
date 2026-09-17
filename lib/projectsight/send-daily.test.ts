@@ -25,14 +25,25 @@ const args = {
 };
 
 describe('sendFog617ToProjectSight', () => {
-  it('returns attached true when create and attach succeed', async () => {
-    const createDailyReport = vi.fn().mockResolvedValue({ id: 'dr-1' });
+  it('creates new daily report once then attaches the file', async () => {
+    const createDailyReport = vi.fn().mockResolvedValue({
+      id: '2',
+      payload: { DailyReportID: 2, Date: '2026-08-20T00:00:00', WorkflowState: 4 },
+    });
     const attachDailyReportFile = vi.fn().mockResolvedValue(undefined);
     const result = await sendFog617ToProjectSight(args, {
       createDailyReport,
       attachDailyReportFile,
     });
-    expect(result).toEqual({ projectSightDailyId: 'dr-1', attached: true });
+    expect(createDailyReport).toHaveBeenCalledTimes(1);
+    expect(createDailyReport.mock.calls[0][3]).toEqual(
+      expect.objectContaining({
+        Title: 'ALC — Roof',
+        TotalWorkApproved: 32,
+        TotalWorkersApproved: 4,
+      }),
+    );
+    expect(result).toEqual({ projectSightDailyId: '2', attached: true });
     expect(attachDailyReportFile).toHaveBeenCalled();
   });
 
@@ -65,6 +76,44 @@ describe('sendFog617ToProjectSight', () => {
       { createDailyReport, attachDailyReportFile },
     );
     expect(result).toEqual({ projectSightDailyId: 'dr-3', attached: false });
+    expect(createDailyReport).toHaveBeenCalledTimes(1);
     expect(attachDailyReportFile).not.toHaveBeenCalled();
+  });
+
+  it('attaches multiple files when files array is provided', async () => {
+    const createDailyReport = vi.fn().mockResolvedValue({ id: 'dr-4' });
+    const attachDailyReportFile = vi.fn().mockResolvedValue(undefined);
+    const result = await sendFog617ToProjectSight(
+      {
+        ...args,
+        files: [
+          { fileName: 'photo1.jpg', fileBytes: Buffer.from('img1'), mimeType: 'image/jpeg' },
+          { fileName: 'photo2.jpg', fileBytes: Buffer.from('img2'), mimeType: 'image/jpeg' },
+        ],
+      },
+      { createDailyReport, attachDailyReportFile },
+    );
+    expect(result).toEqual({ projectSightDailyId: 'dr-4', attached: true });
+    expect(attachDailyReportFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('attaches both daily capture files and STA form files with distinct prefixes', async () => {
+    const createDailyReport = vi.fn().mockResolvedValue({ id: 'dr-100' });
+    const attachDailyReportFile = vi.fn().mockResolvedValue(undefined);
+
+    const files = [
+      { fileName: 'fog617-sheet.jpg', fileBytes: Buffer.from('img1'), category: 'daily_capture' as const },
+      { fileName: 'signed-sta.jpg', fileBytes: Buffer.from('img2'), category: 'sta_form' as const },
+    ];
+
+    const result = await sendFog617ToProjectSight(
+      { ...args, files },
+      { createDailyReport, attachDailyReportFile },
+    );
+
+    expect(result.attached).toBe(true);
+    expect(attachDailyReportFile).toHaveBeenCalledTimes(2);
+    expect(attachDailyReportFile.mock.calls[0][4]).toBe('Daily-Capture-1-fog617-sheet.jpg');
+    expect(attachDailyReportFile.mock.calls[1][4]).toBe('STA-Form-1-signed-sta.jpg');
   });
 });
