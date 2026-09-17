@@ -703,7 +703,7 @@ export function getBowlingMatrix(
       linesToBuild.push({ rowTrade: trade, reports });
     } else {
       // Multiple submitters from the same company -> each gets a separate line!
-      for (const group of submitterGroups.values()) {
+      for (const group of Array.from(submitterGroups.values())) {
         const hasNamedSubmitter = group.displayName && group.key !== '__default';
         const label = hasNamedSubmitter ? group.displayName : 'Field Foreman';
         linesToBuild.push({
@@ -887,81 +887,4 @@ export function batchCommitPunchItems(
     (p) => p.projectId.toLowerCase() === projectId.toLowerCase(),
   );
   return { success: failedCount === 0, createdCount, updatedCount, failedCount, items, errors };
-}
-
-export function getProjectCompanies(
-  projectId: string,
-  filePath: string = DEFAULT_DB_PATH,
-): ProjectCompany[] {
-  const proj = getProjectById(projectId, filePath);
-  return proj?.availableCompanies || [];
-}
-
-export function setProjectCompanies(
-  projectId: string,
-  companies: ProjectCompany[],
-  filePath: string = DEFAULT_DB_PATH,
-): Project | undefined {
-  const store = getStore(filePath);
-  const proj = store.projects.find((p) => p.id.toLowerCase() === projectId.toLowerCase());
-  if (!proj) return undefined;
-  proj.availableCompanies = companies;
-  proj.tradePartners = companies
-    .filter((c) => c.isTracked)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      category: c.trade || 'Trade Partner',
-      contactEmail: c.contacts?.[0]?.email,
-    }));
-  saveStore(store, filePath);
-  return proj;
-}
-
-export function toggleCompanyTracking(
-  projectId: string,
-  companyId: string,
-  isTracked: boolean,
-  filePath: string = DEFAULT_DB_PATH,
-): Project | undefined {
-  const store = getStore(filePath);
-  const proj = store.projects.find((p) => p.id.toLowerCase() === projectId.toLowerCase());
-  if (!proj) return undefined;
-  if (!proj.availableCompanies) proj.availableCompanies = [];
-  const comp = proj.availableCompanies.find(
-    (c) => c.id.toLowerCase() === companyId.toLowerCase(),
-  );
-  if (comp) {
-    comp.isTracked = isTracked;
-  }
-  proj.tradePartners = proj.availableCompanies
-    .filter((c) => c.isTracked)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      category: c.trade || 'Trade Partner',
-      contactEmail: c.contacts?.[0]?.email,
-    }));
-  saveStore(store, filePath);
-  return proj;
-}
-
-export function addCompanyContact(
-  projectId: string,
-  companyId: string,
-  contact: CompanyContact,
-  filePath: string = DEFAULT_DB_PATH,
-): Project | undefined {
-  const store = getStore(filePath);
-  const proj = store.projects.find((p) => p.id.toLowerCase() === projectId.toLowerCase());
-  if (!proj || !proj.availableCompanies) return undefined;
-  const comp = proj.availableCompanies.find(
-    (c) => c.id.toLowerCase() === companyId.toLowerCase(),
-  );
-  if (comp) {
-    if (!comp.contacts) comp.contacts = [];
-    comp.contacts.push(contact);
-  }
-  saveStore(store, filePath);
-  return proj;
 }

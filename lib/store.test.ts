@@ -318,4 +318,114 @@ describe('HPproto Local Store', () => {
     const titan = withContact.find(c => c.id === 'titan-electric');
     expect(titan?.contacts.some(c => c.email === 'jsmith@titan.com')).toBe(true);
   });
+
+  it('lazily initializes availableCompanies from tradePartners with isTracked true', () => {
+    updateProjectTradePartners(
+      '1025',
+      [
+        { id: 'titan-electric', name: 'Titan Electric', category: 'Electrical' },
+        { id: 'apex-drywall', name: 'Apex Drywall', category: 'Drywall' },
+      ],
+      TEST_DB_PATH,
+    );
+
+    const before = getProjectById('1025', TEST_DB_PATH);
+    expect(before?.availableCompanies).toBeUndefined();
+
+    const companies = getProjectCompanies('1025', TEST_DB_PATH);
+    expect(companies).toHaveLength(2);
+    expect(companies.every((c) => c.isTracked)).toBe(true);
+    expect(companies.every((c) => c.contacts.length === 0)).toBe(true);
+    expect(companies.map((c) => c.id).sort()).toEqual(['apex-drywall', 'titan-electric']);
+
+    const after = getProjectById('1025', TEST_DB_PATH);
+    expect(after?.availableCompanies).toHaveLength(2);
+  });
+
+  it('deduplicates company contacts by id, email, or display name', () => {
+    const baseCompany: ProjectCompany = {
+      id: 'titan-electric',
+      name: 'Titan Electric',
+      trade: 'Electrical',
+      isTracked: true,
+      contacts: [
+        {
+          id: 'c-1',
+          firstName: 'John',
+          lastName: 'Doe',
+          displayName: 'John Doe',
+          email: 'jdoe@titan.com',
+        },
+      ],
+    };
+
+    setProjectCompanies('1025', [baseCompany], TEST_DB_PATH);
+    addCompanyContact(
+      '1025',
+      'titan-electric',
+      {
+        id: 'c-1',
+        firstName: 'John',
+        lastName: 'Doe',
+        displayName: 'John Doe',
+        email: 'jdoe@titan.com',
+        title: 'PM',
+      },
+      TEST_DB_PATH,
+    );
+    let titan = getProjectCompanies('1025', TEST_DB_PATH).find((c) => c.id === 'titan-electric');
+    expect(titan?.contacts).toHaveLength(1);
+    expect(titan?.contacts[0].title).toBe('PM');
+
+    addCompanyContact(
+      '1025',
+      'titan-electric',
+      {
+        id: 'c-email-dup',
+        firstName: 'Johnny',
+        lastName: 'D',
+        displayName: 'Johnny D',
+        email: 'jdoe@titan.com',
+        phone: '555-0100',
+      },
+      TEST_DB_PATH,
+    );
+    titan = getProjectCompanies('1025', TEST_DB_PATH).find((c) => c.id === 'titan-electric');
+    expect(titan?.contacts).toHaveLength(1);
+    expect(titan?.contacts[0].phone).toBe('555-0100');
+
+    setProjectCompanies(
+      '1025',
+      [
+        {
+          ...baseCompany,
+          contacts: [
+            {
+              id: 'c-name',
+              firstName: 'John',
+              lastName: 'Doe',
+              displayName: 'John Doe',
+            },
+          ],
+        },
+      ],
+      TEST_DB_PATH,
+    );
+    addCompanyContact(
+      '1025',
+      'titan-electric',
+      {
+        id: 'c-name-dup',
+        firstName: 'John',
+        lastName: 'Doe',
+        displayName: 'John Doe',
+        email: 'other@titan.com',
+      },
+      TEST_DB_PATH,
+    );
+    titan = getProjectCompanies('1025', TEST_DB_PATH).find((c) => c.id === 'titan-electric');
+    expect(titan?.contacts).toHaveLength(1);
+    expect(titan?.contacts[0].email).toBe('other@titan.com');
+  });
+
 });
