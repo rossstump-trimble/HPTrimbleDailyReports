@@ -137,9 +137,15 @@ export default function SuperdailyPage() {
     <>
       <style jsx global>{`
         @media print {
+          @page {
+            size: letter portrait;
+            margin: 0.4in;
+          }
           body, html {
             background: white !important;
-            color: black !important;
+            color: #333333 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           header, nav, aside, .print\\:hidden {
             display: none !important;
@@ -156,14 +162,14 @@ export default function SuperdailyPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <span className="p-1.5 rounded-lg bg-[#A6192E]/10 text-[#A6192E]">
                 <Sparkles className="h-5 w-5" />
               </span>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">
+              <h1 className="text-xl font-bold tracking-tight text-[#333333] dark:text-foreground">
                 Superdaily Master Report
               </h1>
-              <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:text-amber-300">
-                AI Synthesis
+              <Badge variant="outline" className="text-xs border-[#A6192E]/30 text-[#A6192E] bg-[#A6192E]/5">
+                Hensel Phelps Superdaily
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
@@ -185,7 +191,7 @@ export default function SuperdailyPage() {
             <Button
               onClick={() => handleGenerate(date)}
               disabled={loading}
-              className="gap-2 bg-[#0063a3] hover:bg-[#004e82] text-white"
+              className="gap-2 bg-[#A6192E] hover:bg-[#8B1425] text-white shadow-sm"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               <span>{loading ? "Synthesizing..." : "Generate Superdaily"}</span>
@@ -197,7 +203,7 @@ export default function SuperdailyPage() {
                   <Button
                     variant="outline"
                     onClick={handleRestoreAll}
-                    className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                    className="gap-1.5 text-[#B87E00] border-[#F2A900] hover:bg-[#FFFDF5] dark:hover:bg-amber-950/20"
                   >
                     <RotateCcw className="h-4 w-4" />
                     <span>Restore ({totalHiddenCount})</span>
@@ -205,11 +211,10 @@ export default function SuperdailyPage() {
                 )}
 
                 <Button
-                  variant="outline"
                   onClick={handlePrintPdf}
-                  className="gap-1.5 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200"
+                  className="gap-1.5 bg-[#A6192E] hover:bg-[#8B1425] text-white shadow-sm"
                 >
-                  <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <Download className="h-4 w-4" />
                   <span>Download PDF</span>
                 </Button>
               </>

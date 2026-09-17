@@ -74,4 +74,15 @@ describe('Superdaily Integration & Print Component', () => {
     expect(element).toBeDefined();
     expect(element.props.className).toContain('superdaily-print-only');
   });
+
+  it('verifies Superdaily page source includes Hensel Phelps branding classes and badges', () => {
+    // Assert on key branding tokens expected in page markup
+    const fs = require('fs');
+    const path = require('path');
+    const pageSource = fs.readFileSync(path.join(__dirname, 'page.tsx'), 'utf-8');
+    expect(pageSource).toContain('Hensel Phelps Superdaily');
+    expect(pageSource).toContain('#A6192E');
+    expect(pageSource).toContain('#F2A900');
+  });
 });
+
