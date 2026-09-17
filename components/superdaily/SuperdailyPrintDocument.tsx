@@ -3,9 +3,20 @@ import type { SuperdailyReport } from '@/types/superdaily';
 
 interface SuperdailyPrintDocumentProps {
   report: SuperdailyReport;
+  hiddenSectionKeys?: string[];
+  hiddenTradeIds?: string[];
 }
 
-export function SuperdailyPrintDocument({ report }: SuperdailyPrintDocumentProps) {
+export function SuperdailyPrintDocument({
+  report,
+  hiddenSectionKeys = [],
+  hiddenTradeIds = [],
+}: SuperdailyPrintDocumentProps) {
+  const isHidden = (key: string) => hiddenSectionKeys.includes(key);
+  const visibleTrades = report.tradeSummaries.filter(
+    (t) => !hiddenTradeIds.includes(t.tradePartnerId),
+  );
+
   return (
     <div className="superdaily-print-only hidden print:block text-slate-900 bg-white p-6 font-sans text-xs">
       {/* Header */}
@@ -27,11 +38,37 @@ export function SuperdailyPrintDocument({ report }: SuperdailyPrintDocumentProps
         </div>
       </div>
 
+      {/* Weather Strip */}
+      {!isHidden('weather') && report.weather && (
+        <div className="mb-4 p-2.5 bg-sky-50 border border-sky-200 rounded flex items-center justify-between text-[11px] break-inside-avoid">
+          <div className="flex items-center gap-3">
+            <span className="font-bold text-sky-950">Site Weather:</span>
+            <span className="font-semibold text-sky-900">{report.weather.conditions}</span>
+            <span className="text-slate-600">
+              {report.weather.tempMax != null && report.weather.tempMin != null
+                ? `High ${report.weather.tempMax}°F / Low ${report.weather.tempMin}°F`
+                : `${report.weather.temp}°F`}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-slate-600">
+            <span>Wind: {report.weather.windVelocity} mph</span>
+            <span>Humidity: {report.weather.humidity}%</span>
+            {report.weather.rainfall > 0 && <span>Rain: {report.weather.rainfall.toFixed(2)} in.</span>}
+            {report.weather.snowfall > 0 && <span>Snow: {report.weather.snowfall.toFixed(1)} in.</span>}
+          </div>
+        </div>
+      )}
+
       {/* High-level metrics */}
-      <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-slate-50 border border-slate-200 rounded">
+      <div className="grid grid-cols-4 gap-3 mb-4 p-3 bg-slate-50 border border-slate-200 rounded break-inside-avoid">
         <div>
           <span className="text-[10px] text-slate-500 font-semibold uppercase">Active Trades</span>
-          <div className="text-base font-bold text-slate-800">{report.activeTradeCount}</div>
+          <div className="text-base font-bold text-slate-800">
+            {report.activeTradeCount}
+            <span className="text-[10px] text-slate-500 font-normal ml-1">
+              of {report.expectedTradeCount || report.activeTradeCount} expected
+            </span>
+          </div>
         </div>
         <div>
           <span className="text-[10px] text-slate-500 font-semibold uppercase">Total Workers</span>
@@ -50,92 +87,92 @@ export function SuperdailyPrintDocument({ report }: SuperdailyPrintDocumentProps
       </div>
 
       {/* Executive Summary */}
-      <div className="mb-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-1 mb-1.5">
-          Executive Site Summary
-        </h2>
-        <p className="text-slate-800 leading-relaxed text-[11px] whitespace-pre-wrap">
-          {report.executiveSummary}
-        </p>
-      </div>
-
-      {/* Inter-Trade Coordination & Favors */}
-      {report.interTradeFavors.length > 0 && (
+      {!isHidden('overview') && (
         <div className="mb-4 break-inside-avoid">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-1 mb-1.5">
-            Inter-Trade Coordination & Favors
+            Executive Site Summary
           </h2>
-          <div className="space-y-1.5">
-            {report.interTradeFavors.map((favor, idx) => (
-              <div
+          <p className="text-slate-800 leading-relaxed text-[11px] whitespace-pre-wrap">
+            {report.executiveSummary}
+          </p>
+        </div>
+      )}
+
+      {/* Missing Submissions Callout (Trades on Bowling Sheet without a Daily) */}
+      {!isHidden('missing-trades') && report.missingTrades && report.missingTrades.length > 0 && (
+        <div className="mb-4 p-2.5 bg-amber-50 border border-amber-300 rounded break-inside-avoid">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wide">
+              Missing Submissions (On Bowling Sheet)
+            </span>
+            <span className="text-[10px] font-semibold text-amber-800">
+              {report.missingTrades.length} trade partner(s) not reported
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {report.missingTrades.map((m, idx) => (
+              <span
                 key={idx}
-                className="p-2 border border-slate-200 rounded bg-amber-50/40 text-[10px] flex items-start justify-between gap-2"
+                className="px-2 py-0.5 rounded bg-white border border-amber-300 text-amber-950 font-semibold text-[10px]"
               >
-                <div>
-                  <span className="font-bold text-slate-900">{favor.providingTrade}</span>
-                  <span className="text-slate-500 mx-1.5">➔</span>
-                  <span className="font-bold text-slate-900">{favor.receivingTrade}</span>
-                  <p className="text-slate-700 mt-0.5">{favor.description}</p>
-                </div>
-                <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
-                  {favor.type.replace('_', ' ')}
-                </span>
-              </div>
+                {m.tradePartnerName}
+                {m.category && <span className="text-slate-500 font-normal ml-1">({m.category})</span>}
+              </span>
             ))}
           </div>
         </div>
       )}
 
       {/* Subcontractor Work Breakdown */}
-      <div className="mb-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-1 mb-2">
-          Trade Breakdown & Activities
-        </h2>
-        <table className="w-full text-left border-collapse text-[10px]">
-          <thead>
-            <tr className="border-b border-slate-300 bg-slate-100 text-slate-700">
-              <th className="py-1 px-2 font-semibold">Subcontractor</th>
-              <th className="py-1 px-2 font-semibold w-16 text-center">Crew</th>
-              <th className="py-1 px-2 font-semibold w-16 text-center">Hours</th>
-              <th className="py-1 px-2 font-semibold">Location & Work Performed</th>
-              <th className="py-1 px-2 font-semibold w-24">Equipment</th>
-              <th className="py-1 px-2 font-semibold w-16 text-center">STA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.tradeSummaries.map((trade, idx) => (
-              <tr key={idx} className="border-b border-slate-200 break-inside-avoid">
-                <td className="py-1.5 px-2 font-bold text-slate-900 align-top">
-                  {trade.tradePartnerName}
-                </td>
-                <td className="py-1.5 px-2 text-center text-slate-800 align-top">
-                  {trade.workerCount}
-                </td>
-                <td className="py-1.5 px-2 text-center text-slate-800 align-top">
-                  {trade.totalHours}
-                </td>
-                <td className="py-1.5 px-2 text-slate-800 align-top">
-                  <div className="font-semibold text-slate-600 mb-0.5">{trade.locationDescription}</div>
-                  <div className="whitespace-pre-wrap">{trade.workPerformed}</div>
-                </td>
-                <td className="py-1.5 px-2 text-slate-600 align-top">
-                  {trade.equipment.length > 0 ? trade.equipment.join(', ') : '—'}
-                </td>
-                <td className="py-1.5 px-2 text-center align-top">
-                  {trade.staCompleted ? (
-                    <span className="text-emerald-700 font-bold">✓</span>
-                  ) : (
-                    <span className="text-amber-600 font-bold">✗</span>
-                  )}
-                </td>
-              </tr>
+      {!isHidden('trades') && visibleTrades.length > 0 && (
+        <div className="mb-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-1 mb-2">
+            Trade Contractor Work & Field Activities
+          </h2>
+          <div className="space-y-2.5">
+            {visibleTrades.map((trade, idx) => (
+              <div
+                key={idx}
+                className="border border-slate-200 rounded p-2.5 bg-slate-50/50 break-inside-avoid"
+              >
+                <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-xs">{trade.tradePartnerName}</span>
+                    {trade.category && (
+                      <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[9px] font-semibold">
+                        {trade.category}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] text-slate-600 font-medium">
+                    <span>Crew: <strong className="text-slate-900">{trade.workerCount}</strong></span>
+                    <span>Hours: <strong className="text-slate-900">{trade.totalHours}</strong></span>
+                    <span>
+                      STA: {trade.staCompleted ? <strong className="text-emerald-700 font-bold">✓ Complete</strong> : <strong className="text-amber-700 font-bold">✗ Incomplete</strong>}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-700 mb-1.5">
+                  <span className="font-semibold text-slate-900 mr-1">Location & Activities:</span>
+                  <span className="text-slate-600 mr-2">[{trade.locationDescription}]</span>
+                  <span className="leading-relaxed whitespace-pre-wrap">{trade.workPerformed}</span>
+                </div>
+
+                {trade.equipment.length > 0 && (
+                  <div className="text-[9px] text-slate-500 flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-600">Equipment in Use:</span>
+                    <span>{trade.equipment.join(', ')}</span>
+                  </div>
+                )}
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Roadblocks & Delays */}
-      {report.delaysAndRoadblocks.length > 0 && (
+      {!isHidden('delays') && report.delaysAndRoadblocks.length > 0 && (
         <div className="mb-4 break-inside-avoid">
           <h2 className="text-xs font-bold uppercase tracking-wider text-red-800 border-b border-red-200 pb-1 mb-1.5">
             Reported Delays & Roadblocks
@@ -149,12 +186,14 @@ export function SuperdailyPrintDocument({ report }: SuperdailyPrintDocumentProps
       )}
 
       {/* Safety notes */}
-      <div className="mb-6 break-inside-avoid">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-1 mb-1">
-          Safety & STA Summary
-        </h2>
-        <p className="text-slate-700 text-[10px]">{report.safetyAndStas.staNotes}</p>
-      </div>
+      {!isHidden('safety') && (
+        <div className="mb-6 break-inside-avoid">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 border-b border-slate-200 pb-1 mb-1">
+            Safety & STA Summary
+          </h2>
+          <p className="text-slate-700 text-[10px]">{report.safetyAndStas.staNotes}</p>
+        </div>
+      )}
 
       {/* Signature & Sign-off footer */}
       <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-8 break-inside-avoid text-[10px]">
