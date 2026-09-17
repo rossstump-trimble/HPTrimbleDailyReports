@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from './[projectId]/route';
 import { POST as commitPost } from './[projectId]/[inspectionId]/commit/route';
+import { POST as extractPost } from './[projectId]/extract/route';
 import { saveInspectionRecord, getInspectionById } from '@/lib/store';
 
 describe('Inspections API Routes', () => {
@@ -59,5 +60,42 @@ describe('Inspections API Routes', () => {
 
     const updated = getInspectionById('test-insp-route-1');
     expect(updated?.status).toBe('approved');
+  });
+
+  it('extract handles multi-image checklist extraction with targetChecklistId', async () => {
+    saveInspectionRecord({
+      id: 'target-ck-123',
+      projectId: '1025',
+      number: 'CK-0099',
+      title: 'Structural Steel Pre-Erection Checklist',
+      status: 'open',
+      items: [
+        { id: 'item-s1', itemNumber: 1, prompt: 'Anchor bolts verified', result: 'Unchecked' },
+        { id: 'item-s2', itemNumber: 2, prompt: 'Grout pads level', result: 'Unchecked' },
+      ],
+      source: 'projectsight',
+      createdAt: '2026-09-17T00:00:00.000Z',
+      updatedAt: '2026-09-17T00:00:00.000Z',
+    });
+
+    const fd = new FormData();
+    fd.append('targetChecklistId', 'target-ck-123');
+    fd.append('files', new File(['page1'], 'page1.jpg', { type: 'image/jpeg' }));
+    fd.append('files', new File(['page2'], 'page2.jpg', { type: 'image/jpeg' }));
+
+    const req = new Request('http://localhost:3000/api/inspections/1025/extract', {
+      method: 'POST',
+      body: fd,
+    });
+
+    const res = await extractPost(req, { params: { projectId: '1025' } });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(Array.isArray(json.previewUrls)).toBe(true);
+    expect(json.previewUrls.length).toBe(2);
+    expect(json.previewUrl).toBeDefined();
+    expect(json.data).toBeDefined();
   });
 });
