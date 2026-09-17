@@ -741,14 +741,34 @@ export default function IntakePage() {
               />
             ) : (
               /* ── 4 Mode Tabs: Speak Freely -> Guided Q&A -> Photo/File -> Form Entry ── */
-              <Tabs
-                value={activeTab}
-                onValueChange={(val) => {
-                  setActiveTab(val as "stream" | "interview" | "file" | "form");
-                  setInterviewMode(null);
-                }}
-                className="w-full"
-              >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+                  <div className="flex items-center gap-2.5">
+                    <ClipboardCheck className="h-5 w-5 text-[#0063a3] dark:text-blue-400 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-gray-900 dark:text-gray-100">
+                        Have a Printed Inspection Checklist?
+                      </div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Scan physical inspection sheets directly to ProjectSight.
+                      </div>
+                    </div>
+                  </div>
+                  <Link href={`/projects/${projectId}/inspections`}>
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 shrink-0">
+                      <Camera className="h-3.5 w-3.5" /> Scan Sheet
+                    </Button>
+                  </Link>
+                </div>
+
+                <Tabs
+                  value={activeTab}
+                  onValueChange={(val) => {
+                    setActiveTab(val as "stream" | "interview" | "file" | "form");
+                    setInterviewMode(null);
+                  }}
+                  className="w-full"
+                >
                 <TabsList className="grid h-12 w-full grid-cols-4 rounded-2xl bg-gray-200/70 dark:bg-gray-800 p-1">
                   <TabsTrigger
                     value="stream"
@@ -834,6 +854,7 @@ export default function IntakePage() {
                   {confirmCard}
                 </TabsContent>
               </Tabs>
+              </div>
             )}
           </div>
         )}

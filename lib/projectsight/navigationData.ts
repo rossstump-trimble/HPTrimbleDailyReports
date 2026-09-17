@@ -66,6 +66,13 @@ export function getNavigationItemsForProject(projectId: string = "1025"): MenuIt
       order: 23,
     },
     {
+      id: "inspections",
+      name: "Inspections",
+      icon: ClipboardCheck,
+      path: `/projects/${projectId}/inspections`,
+      order: 24,
+    },
+    {
       id: "daily-report",
       name: "Daily Intake",
       icon: QrCode,
