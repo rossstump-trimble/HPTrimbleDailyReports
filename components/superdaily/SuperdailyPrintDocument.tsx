@@ -19,7 +19,7 @@ export function SuperdailyPrintDocument({
 
   return (
     <div
-      className="superdaily-print-only hidden print:block text-[#333333] bg-white p-6 text-xs"
+      className="superdaily-print-only hidden print:block text-[#333333] bg-white p-6 text-xs font-sans"
       style={{ fontFamily: 'var(--font-roboto), Roboto, -apple-system, sans-serif' }}
     >
       {/* Brand Header */}

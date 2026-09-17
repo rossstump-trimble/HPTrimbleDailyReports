@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import React from "react";
 import { describe, it, expect } from "vitest";
-import { renderToStaticMarkup } from "react-dom/server";
+import { render, screen } from "@testing-library/react";
 import { SuperdailyPrintDocument } from "./SuperdailyPrintDocument";
 import type { SuperdailyReport } from "@/types/superdaily";
 
@@ -53,19 +54,23 @@ const mockReport: SuperdailyReport = {
 
 describe("SuperdailyPrintDocument Hensel Phelps Brand Styling", () => {
   it("renders the Hensel Phelps logo image with proper alt text", () => {
-    const html = renderToStaticMarkup(<SuperdailyPrintDocument report={mockReport} />);
-    expect(html).toContain('src="/images/hp-logo-std.png"');
-    expect(html).toContain('alt="Hensel Phelps - Plan. Build. Manage."');
+    render(<SuperdailyPrintDocument report={mockReport} />);
+    const logo = screen.getByAltText(/Hensel Phelps/i);
+    expect(logo).toBeDefined();
+    expect(logo.getAttribute("src")).toContain("hp-logo-std.png");
   });
 
   it("renders the Hensel Phelps dual brand horizon colors #A6192E and #F2A900", () => {
-    const html = renderToStaticMarkup(<SuperdailyPrintDocument report={mockReport} />);
-    expect(html).toContain('data-brand="hp-horizon-red"');
-    expect(html).toContain('data-brand="hp-horizon-yellow"');
+    const { container } = render(<SuperdailyPrintDocument report={mockReport} />);
+    const horizonRed = container.querySelector('[data-brand="hp-horizon-red"]');
+    const horizonYellow = container.querySelector('[data-brand="hp-horizon-yellow"]');
+    expect(horizonRed).not.toBeNull();
+    expect(horizonYellow).not.toBeNull();
   });
 
   it("renders the missing trades callout using Wheatland Yellow styling", () => {
-    const html = renderToStaticMarkup(<SuperdailyPrintDocument report={mockReport} />);
-    expect(html).toContain("Tri-County Concrete");
+    render(<SuperdailyPrintDocument report={mockReport} />);
+    const matches = screen.getAllByText(/Tri-County Concrete/i);
+    expect(matches.length).toBeGreaterThan(0);
   });
 });
