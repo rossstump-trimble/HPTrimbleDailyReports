@@ -1,34 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
-  Building2,
   Camera,
   CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
   FileEdit,
   Handshake,
-  HelpCircle,
   ListOrdered,
   Loader2,
   Mic,
   Plus,
-  ShieldCheck,
   Sparkles,
-  Trash2,
-  UploadCloud,
   UserCheck,
 } from "lucide-react";
 import FileUploadDropzone from "@/components/intake/FileUploadDropzone";
 import VoiceInterview from "@/components/intake/VoiceInterview";
 import FreeformVoiceCapture from "@/components/intake/FreeformVoiceCapture";
-import DailyConfirmCard, { type DailyFormData } from "@/components/intake/DailyConfirmCard";
+import HpDailyConfirmCard from "@/components/intake/HpDailyConfirmCard";
+import type { DailyFormData } from "@/components/intake/DailyConfirmCard";
 import SourceReview from "@/components/intake/SourceReview";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -61,9 +55,9 @@ function emptyHpForm(employeeName = "", employeeRole = ""): DailyFormData {
     submittedBy: submitter || "HP Field Staff",
     date: todayISO(),
     locationDescription: "",
-    workerCount: 1,
-    totalHours: 8,
-    crewBreakdown: [{ craft: "HP Staff", count: 1 }],
+    workerCount: 0,
+    totalHours: 0,
+    crewBreakdown: [],
     tierSubcontractors: [],
     tierSubsSummary: "",
     equipment: [],
@@ -89,6 +83,10 @@ function applyHpExtracted(
     tradePartnerId: "hensel-phelps",
     tradePartnerName: "Hensel Phelps",
     isHpEmployee: true,
+    workerCount: 0,
+    totalHours: 0,
+    crewBreakdown: [],
+    staCompleted: true,
     date: fields.date ?? current.date ?? todayISO(),
     tradesAndFavors: fields.tradesAndFavors ?? current.tradesAndFavors ?? "",
     notes: fields.notes ?? current.notes ?? "",
@@ -139,15 +137,20 @@ function SuccessCard({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-6 py-12 px-6 text-center">
-      <div className="w-20 h-20 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-        <CheckCircle2 size={44} className="text-[#0063a3] dark:text-blue-400" />
+      <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center">
+        <CheckCircle2 size={44} className="text-emerald-600 dark:text-emerald-400" />
       </div>
 
-      <div>
-        <Badge className="mb-2 bg-[#0063a3] text-white">Hensel Phelps Daily Submitted</Badge>
-        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">HP Staff Daily Log Received</h2>
+      <div className="space-y-2">
+        <div className="flex items-center justify-center gap-2">
+          <Badge className="bg-emerald-600 text-white font-bold text-xs">Direct ProjectSight Dispatch</Badge>
+          <Badge variant="outline" className="border-emerald-500 text-emerald-700 dark:text-emerald-300 font-semibold text-xs">
+            Auto-Approved
+          </Badge>
+        </div>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">HP Staff Daily Log Synced</h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 max-w-md">
-          {submitter ? `Report from ${submitter}` : "Your HP employee daily log"} {date ? `for ${date}` : ""} has been submitted, recorded for ProjectSight synchronization, and trade favors logged.
+          {submitter ? `Report from ${submitter}` : "Your HP employee daily log"} {date ? `for ${date}` : ""} has been saved and dispatched directly to ProjectSight. No approval required.
         </p>
       </div>
 
@@ -184,7 +187,7 @@ export default function HpIntakePage() {
 
   const [projectName, setProjectName] = useState<string>("Hensel Phelps Project");
   const [projectCode, setProjectCode] = useState<string>("");
-  const [step, setStep] = useState<"upload" | "sta" | "confirm" | "success">("upload");
+  const [step, setStep] = useState<"upload" | "confirm" | "success">("upload");
   const [activeTab, setActiveTab] = useState<"stream" | "interview" | "form" | "file">("stream");
   const [isExtracting, setIsExtracting] = useState(false);
   const [captureSource, setCaptureSource] = useState<"file" | "voice" | null>(null);
@@ -200,7 +203,6 @@ export default function HpIntakePage() {
   const [formData, setFormData] = useState<DailyFormData>(emptyHpForm());
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFile, setSourceFile] = useState<File | null>(null);
-  const [staFiles, setStaFiles] = useState<File[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [tidReady, setTidReady] = useState(false);
 
@@ -234,6 +236,10 @@ export default function HpIntakePage() {
       tradePartnerId: "hensel-phelps",
       tradePartnerName: "Hensel Phelps",
       isHpEmployee: true,
+      workerCount: 0,
+      totalHours: 0,
+      crewBreakdown: [],
+      staCompleted: true,
     }));
   }, [employeeName, employeeRole]);
 
@@ -278,7 +284,7 @@ export default function HpIntakePage() {
         setExtractionFailed(true);
       } finally {
         setIsExtracting(false);
-        setStep("sta");
+        setStep("confirm");
       }
     },
     [],
@@ -313,7 +319,7 @@ export default function HpIntakePage() {
         }
       }
 
-      setStep("sta");
+      setStep("confirm");
     },
     [],
   );
@@ -364,7 +370,7 @@ export default function HpIntakePage() {
         }
       } finally {
         setIsExtracting(false);
-        setStep("sta");
+        setStep("confirm");
       }
     },
     [],
@@ -387,6 +393,10 @@ export default function HpIntakePage() {
           tradePartnerName: "Hensel Phelps",
           submittedBy: submitter || formData.submittedBy || "HP Field Staff",
           isHpEmployee: true,
+          workerCount: 0,
+          totalHours: 0,
+          crewBreakdown: [],
+          staCompleted: true,
         }),
       );
       if (sourceFiles.length > 0) {
@@ -395,11 +405,6 @@ export default function HpIntakePage() {
         }
       } else if (sourceFile) {
         body.append("file", sourceFile);
-      }
-      if (staFiles.length > 0) {
-        for (const f of staFiles) {
-          body.append("staFiles", f);
-        }
       }
       const res = await fetch("/api/intake/submit", {
         method: "POST",
@@ -415,14 +420,13 @@ export default function HpIntakePage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [projectId, formData, employeeName, employeeRole, sourceFiles, sourceFile, staFiles]);
+  }, [projectId, formData, employeeName, employeeRole, sourceFiles, sourceFile]);
 
   const resetToUpload = useCallback(() => {
     setStep("upload");
     setFormData(emptyHpForm(employeeName, employeeRole));
     setSourceFiles([]);
     setSourceFile(null);
-    setStaFiles([]);
     setCaptureSource(null);
     setExtractionFailed(false);
     setSpokenTranscript(null);
@@ -707,113 +711,6 @@ export default function HpIntakePage() {
           </div>
         )}
 
-        {/* STA Photo Capture Step */}
-        {step === "sta" && (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm space-y-6">
-            <div className="text-center space-y-2">
-              <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
-                <ShieldCheck size={28} />
-              </div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                Safety Task Analysis (STA) Photos
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Please take a photo or attach the signed daily STA safety briefing form for today&apos;s shift.
-              </p>
-            </div>
-
-            {/* Photo Capture / Upload Actions */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0063a3] hover:bg-blue-700 text-white font-semibold cursor-pointer transition text-sm">
-                <Camera size={18} />
-                <span>Take Photo of STA</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files?.length) {
-                      setStaFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-                    }
-                  }}
-                />
-              </label>
-
-              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold cursor-pointer transition text-sm">
-                <UploadCloud size={18} />
-                <span>Upload File/PDF</span>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files?.length) {
-                      setStaFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-                    }
-                  }}
-                />
-              </label>
-            </div>
-
-            {/* Gallery of captured STAs */}
-            {staFiles.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Captured STA Forms ({staFiles.length})
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {staFiles.map((file, i) => (
-                    <div
-                      key={i}
-                      className="relative group rounded-xl border border-gray-200 dark:border-gray-700 p-2.5 flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-800"
-                    >
-                      <span className="truncate max-w-[140px] font-medium">{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setStaFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="text-gray-400 hover:text-red-500 p-1 transition-colors"
-                        aria-label="Remove STA photo"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Navigation */}
-            <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setFormData((prev) => ({ ...prev, staCompleted: staFiles.length > 0 }));
-                  setStep("confirm");
-                }}
-                className="w-full py-3 px-4 rounded-xl font-semibold text-white transition text-sm"
-                style={{ backgroundColor: "#0063a3" }}
-              >
-                {staFiles.length > 0 ? "Continue to Review" : "Continue"}
-              </button>
-
-              {staFiles.length === 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData((prev) => ({ ...prev, staCompleted: false }));
-                    setStep("confirm");
-                  }}
-                  className="w-full py-2 text-xs text-amber-600 dark:text-amber-400 hover:underline transition"
-                >
-                  Skip STA for now (Flags report as missing STA)
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Confirmation & Editing step */}
         {step === "confirm" && (
           <div className="space-y-4">
@@ -835,20 +732,14 @@ export default function HpIntakePage() {
               </div>
             )}
 
-            <DailyConfirmCard
-              tradePartners={HP_TRADE_PARTNERS}
-              initialData={formData}
+            <HpDailyConfirmCard
               data={formData}
               onChange={setFormData}
               onCancel={resetToUpload}
               onSubmit={handleSubmit}
               isSubmitting={isSubmitting}
-              submitLabel="Submit HP Daily Report"
-              requireTradePartner={false}
               attachedFiles={sourceFiles}
               onAttachedFilesChange={setSourceFiles}
-              staFiles={staFiles}
-              onStaFilesChange={setStaFiles}
             />
           </div>
         )}
