@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getCapacityStatus, upsertDailyReport, CapacityLimitError } from '@/lib/store';
-import { saveUpload } from '@/lib/upload-store';
+import { cookies } from 'next/headers';
+import { getCapacityStatus, upsertDailyReport, markDailySentToProjectSight, CapacityLimitError } from '@/lib/store';
+import { saveUpload, readUpload } from '@/lib/upload-store';
 import { backupIngestedDaily, type IngestedFileAttachment } from '@/lib/ingest-backup';
 import type { DailyReport } from '@/types/hpproto';
 import { slugTradePartnerId } from '@/lib/trade-partner';
+import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
+import { SESSION_COOKIE } from '@/lib/local-session';
+import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
+import { sendFog617ToProjectSight } from '@/lib/projectsight/send-daily';
+import { captureFromDailyReport } from '@/lib/projectsight/send-intake-daily';
 
 export const runtime = 'nodejs';
 
@@ -132,6 +138,8 @@ export async function POST(req: Request) {
       savedStaAttachments = staAttachments;
     }
 
+    const isHp = Boolean(body.isHpEmployee);
+
     const report: DailyReport = {
       id,
       projectId,
@@ -139,24 +147,24 @@ export async function POST(req: Request) {
       tradePartnerName: tradePartnerName || body.tradePartnerName || '',
       date,
       submittedAt: new Date().toISOString(),
-      submittedBy: body.submittedBy || 'Field Intake',
+      submittedBy: body.submittedBy || (isHp ? 'HP Staff' : 'Field Intake'),
       locationDescription: body.locationDescription ?? '',
-      workerCount: body.workerCount ?? 0,
-      totalHours: body.totalHours ?? 0,
-      crewBreakdown: body.crewBreakdown ?? [],
+      workerCount: isHp ? 0 : (body.workerCount ?? 0),
+      totalHours: isHp ? 0 : (body.totalHours ?? 0),
+      crewBreakdown: isHp ? [] : (body.crewBreakdown ?? []),
       tierSubcontractors: body.tierSubcontractors ?? [],
       tierSubsSummary: body.tierSubsSummary ?? '',
       equipment: body.equipment ?? [],
       notes: body.notes ?? '',
       tradesAndFavors: body.tradesAndFavors ?? '',
-      isHpEmployee: body.isHpEmployee ?? false,
-      staCompleted: savedStaAttachments.length > 0 || body.staCompleted || false,
-      staFiles: savedStaAttachments.length > 0 ? savedStaAttachments : undefined,
+      isHpEmployee: isHp,
+      staCompleted: isHp ? true : (savedStaAttachments.length > 0 || body.staCompleted || false),
+      staFiles: isHp ? undefined : (savedStaAttachments.length > 0 ? savedStaAttachments : undefined),
       emailRecipients: body.emailRecipients ?? [],
       rawSourceFileName,
       rawSourcePath,
       rawSourceFiles: rawSourceFiles.length > 0 ? rawSourceFiles : undefined,
-      approvalStatus: 'pending',
+      approvalStatus: isHp ? 'approved' : 'pending',
     };
 
     try {
@@ -185,11 +193,70 @@ export async function POST(req: Request) {
       throw e;
     }
 
+    let psDailyId: string | undefined;
+    let psAttached: boolean | undefined;
+
+    // If HP staff report, dispatch directly to ProjectSight API without requiring superintendent approval
+    if (isHp) {
+      try {
+        const jar = cookies();
+        const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
+        const portfolioId = dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
+        const targetProjectId = dest.projectId || DEFAULT_DESTINATION.projectId;
+        const sessionCookie = jar.get(SESSION_COOKIE)?.value;
+        const { token } = await getValidTidAccessToken(sessionCookie);
+
+        if (token && portfolioId && targetProjectId) {
+          const filesToAttach = (saved.rawSourceFiles || []).map((f) => {
+            const fileData = readUpload(f.filePath);
+            return {
+              fileName: f.fileName,
+              fileBytes: fileData || Buffer.from(''),
+              mimeType: f.mimeType,
+              category: 'daily_capture' as const,
+            };
+          });
+
+          const capture = captureFromDailyReport(saved);
+          const psResult = await sendFog617ToProjectSight({
+            token,
+            portfolioId,
+            projectId: targetProjectId,
+            capture,
+            files: filesToAttach.length > 0 ? filesToAttach : undefined,
+            fileName: filesToAttach[0]?.fileName,
+            fileBytes: filesToAttach[0]?.fileBytes,
+          });
+
+          if (psResult.projectSightDailyId) {
+            psDailyId = psResult.projectSightDailyId;
+            psAttached = psResult.attached;
+            const stamped = markDailySentToProjectSight(saved.id, {
+              projectSightDailyId: psResult.projectSightDailyId,
+              projectSightPortfolioId: portfolioId,
+              projectSightProjectId: targetProjectId,
+              sentToProjectSightAt: new Date().toISOString(),
+            });
+            if (stamped) {
+              saved = stamped;
+            }
+          }
+        }
+      } catch (psErr) {
+        console.warn('[intake/submit] direct HP dispatch error', psErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       report: saved,
-      status: 'pending_review',
-      message: 'Daily report received and queued for review.',
+      status: isHp ? 'approved' : 'pending_review',
+      autoApproved: isHp,
+      projectSightDailyId: psDailyId,
+      attached: psAttached,
+      message: isHp
+        ? (psDailyId ? `HP daily approved and synced to ProjectSight #${psDailyId}.` : 'HP daily approved.')
+        : 'Daily report received and queued for review.',
     });
   } catch (err) {
     console.error('[intake/submit]', err);

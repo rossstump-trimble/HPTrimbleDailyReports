@@ -63,12 +63,16 @@ export function buildDailyNarrative(capture: Fog617Capture): string {
   return lines.join('\n');
 }
 
-export function mapFog617ToProjectSightBody(capture: Fog617Capture): Record<string, unknown> {
+export function mapFog617ToProjectSightBody(
+  capture: Fog617Capture,
+  weather?: { weatherNotes?: string; summary?: string } | null,
+): Record<string, unknown> {
   const trade = (capture.tradePartnerName || '').trim();
   const location = (capture.locationDescription || '').trim();
   const effectiveLocation = location || 'Jobsite';
   const notes = (capture.notes || '').trim();
   const workDescription = location || buildDailyNarrative(capture);
+  const title = buildDailyTitle(capture);
 
   const crew = capture.crewBreakdown ?? [];
   const calculatedWorkerCount = crew.reduce((sum, r) => sum + (Number(r.count) || 0), 0);
@@ -79,12 +83,13 @@ export function mapFog617ToProjectSightBody(capture: Fog617Capture): Record<stri
     return sum + rowTotal;
   }, 0);
 
-  const workerCount = capture.workerCount || calculatedWorkerCount || 1;
-  const totalHours = capture.totalHours || calculatedTotalHours || workerCount * 8;
+  const isHp = Boolean(capture.isHpEmployee);
+  const workerCount = isHp ? (capture.workerCount ?? 0) : (capture.workerCount || calculatedWorkerCount || 1);
+  const totalHours = isHp ? (capture.totalHours ?? 0) : (capture.totalHours || calculatedTotalHours || workerCount * 8);
   const hoursPerWorker =
     workerCount > 0 && totalHours > 0
       ? Math.round((totalHours / workerCount) * 10) / 10
-      : 8;
+      : (isHp ? 0 : 8);
 
   const dailyWorksItems: Record<string, unknown>[] = [];
   if (crew.length > 0) {
@@ -115,10 +120,10 @@ export function mapFog617ToProjectSightBody(capture: Fog617Capture): Record<stri
     }
   } else {
     dailyWorksItems.push({
-      CompanyName: trade || 'Trade Partner',
-      Company: trade || 'Trade Partner',
-      Trade: trade || 'Trade Partner',
-      TradePartner: trade || 'Trade Partner',
+      CompanyName: trade || (isHp ? 'Hensel Phelps' : 'Trade Partner'),
+      Company: trade || (isHp ? 'Hensel Phelps' : 'Trade Partner'),
+      Trade: isHp ? 'General Contractor Supervision' : (trade || 'Trade Partner'),
+      TradePartner: trade || (isHp ? 'Hensel Phelps' : 'Trade Partner'),
       WorkDescription: workDescription,
       Description: workDescription,
       WorkPerformed: location || workDescription,
@@ -136,13 +141,20 @@ export function mapFog617ToProjectSightBody(capture: Fog617Capture): Record<stri
     });
   }
 
-  return {
+  const payload: Record<string, unknown> = {
     Date: capture.date || '',
-    Title: buildDailyTitle(capture),
+    Title: title,
+    Subject: `[AI Generated] ${title}`,
     Description: buildDailyNarrative(capture),
     TotalWorkersApproved: workerCount,
     TotalWorkApproved: totalHours,
     DailyWorks: dailyWorksItems,
     Works: dailyWorksItems,
   };
+  if (weather?.weatherNotes) {
+    payload.WeatherNotes = weather.weatherNotes;
+  } else if (weather?.summary) {
+    payload.WeatherNotes = weather.summary;
+  }
+  return payload;
 }
