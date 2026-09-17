@@ -18,7 +18,10 @@ import {
   Loader2,
   Mic,
   Plus,
+  ShieldCheck,
   Sparkles,
+  Trash2,
+  UploadCloud,
 } from "lucide-react";
 import FileUploadDropzone from "@/components/intake/FileUploadDropzone";
 import VoiceInterview from "@/components/intake/VoiceInterview";
@@ -45,7 +48,7 @@ import { resolveTradePartner } from "@/lib/trade-partner";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = "upload" | "confirm" | "success";
+type Step = "upload" | "sta" | "confirm" | "success";
 type CaptureSource = "file" | "voice";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -148,8 +151,9 @@ function TrimbleHeader({
 function StepIndicator({ step }: { step: Step }) {
   const steps: { key: Step; label: string }[] = [
     { key: "upload", label: "1. Capture" },
-    { key: "confirm", label: "2. Review & Edit" },
-    { key: "success", label: "3. Submitted" },
+    { key: "sta", label: "2. STA Photo" },
+    { key: "confirm", label: "3. Review & Edit" },
+    { key: "success", label: "4. Submitted" },
   ];
   const currentIndex = steps.findIndex((s) => s.key === step);
 
@@ -298,6 +302,7 @@ export default function IntakePage() {
   const [formData, setFormData] = useState<DailyFormData>(emptyForm());
   const [sourceFiles, setSourceFiles] = useState<File[]>([]);
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [staFiles, setStaFiles] = useState<File[]>([]);
   const [tidReady, setTidReady] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -415,7 +420,7 @@ export default function IntakePage() {
         setExtractionFailed(true);
       } finally {
         setIsExtracting(false);
-        setStep("confirm");
+        setStep("sta");
       }
     },
     [formData.tradePartnerName, tradePartners],
@@ -457,7 +462,7 @@ export default function IntakePage() {
         }
       }
 
-      setStep("confirm");
+      setStep("sta");
     },
     [tradePartners],
   );
@@ -510,7 +515,7 @@ export default function IntakePage() {
         }
       } finally {
         setIsExtracting(false);
-        setStep("confirm");
+        setStep("sta");
       }
     },
     [formData.tradePartnerName, tradePartners],
@@ -523,13 +528,25 @@ export default function IntakePage() {
     setSubmitError(null);
     try {
       const body = new FormData();
-      body.append("daily", JSON.stringify({ projectId, ...formData }));
+      body.append(
+        "daily",
+        JSON.stringify({
+          projectId,
+          ...formData,
+          staCompleted: formData.staCompleted || staFiles.length > 0,
+        }),
+      );
       if (sourceFiles.length > 0) {
         for (const f of sourceFiles) {
           body.append("files", f);
         }
       } else if (sourceFile) {
         body.append("file", sourceFile);
+      }
+      if (staFiles.length > 0) {
+        for (const f of staFiles) {
+          body.append("staFiles", f);
+        }
       }
       const res = await fetch("/api/intake/submit", {
         method: "POST",
@@ -545,7 +562,7 @@ export default function IntakePage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [projectId, formData, sourceFiles, sourceFile]);
+  }, [projectId, formData, sourceFiles, sourceFile, staFiles]);
 
   // ── Reset ────────────────────────────────────────────────────────────────
 
@@ -558,6 +575,7 @@ export default function IntakePage() {
     setFormData(emptyForm());
     setSourceFiles([]);
     setSourceFile(null);
+    setStaFiles([]);
     setSourcePages([]);
     setSubmitError(null);
   }, []);
@@ -588,6 +606,8 @@ export default function IntakePage() {
       submitLabel="Submit Daily Report"
       attachedFiles={sourceFiles}
       onAttachedFilesChange={setSourceFiles}
+      staFiles={staFiles}
+      onStaFilesChange={setStaFiles}
     />
   );
 
@@ -860,7 +880,114 @@ export default function IntakePage() {
           </div>
         )}
 
-        {/* ── Step 2: Confirm & Edit ──────────────────────────────────────── */}
+        {/* ── Step 2: STA Photo Capture ──────────────────────────────────── */}
+        {step === "sta" && (
+          <div className="max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm space-y-6">
+            <div className="text-center space-y-2">
+              <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
+                <ShieldCheck size={28} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Safety Task Analysis (STA) Photos
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Please take a photo or attach your signed daily STA safety briefing form. It will be attached directly to your ProjectSight daily report.
+              </p>
+            </div>
+
+            {/* Photo Capture / Upload Actions */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0063a3] hover:bg-blue-700 text-white font-semibold cursor-pointer transition text-sm">
+                <Camera size={18} />
+                <span>Take Photo of STA</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) {
+                      setStaFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                    }
+                  }}
+                />
+              </label>
+
+              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold cursor-pointer transition text-sm">
+                <UploadCloud size={18} />
+                <span>Upload File/PDF</span>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) {
+                      setStaFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
+            {/* Gallery of captured STAs */}
+            {staFiles.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Captured STA Forms ({staFiles.length})
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {staFiles.map((file, i) => (
+                    <div
+                      key={i}
+                      className="relative group rounded-xl border border-gray-200 dark:border-gray-700 p-2.5 flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-800"
+                    >
+                      <span className="truncate max-w-[140px] font-medium">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setStaFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                        aria-label="Remove STA photo"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Navigation */}
+            <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({ ...prev, staCompleted: staFiles.length > 0 }));
+                  setStep("confirm");
+                }}
+                className="w-full py-3 px-4 rounded-xl font-semibold text-white transition text-sm"
+                style={{ backgroundColor: "#0063a3" }}
+              >
+                {staFiles.length > 0 ? "Continue to Review" : "Continue"}
+              </button>
+
+              {staFiles.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData((prev) => ({ ...prev, staCompleted: false }));
+                    setStep("confirm");
+                  }}
+                  className="w-full py-2 text-xs text-amber-600 dark:text-amber-400 hover:underline transition"
+                >
+                  Skip STA for now (Flags report as missing STA)
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3: Confirm & Edit ──────────────────────────────────────── */}
         {step === "confirm" && (
           <div className={`${showSourceTab ? "max-w-5xl" : "max-w-lg"} mx-auto space-y-4`}>
             <div>

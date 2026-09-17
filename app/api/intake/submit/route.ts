@@ -7,7 +7,13 @@ import { slugTradePartnerId } from '@/lib/trade-partner';
 
 export const runtime = 'nodejs';
 
-async function dailyFromFormData(form: FormData): Promise<Partial<DailyReport> & { files?: File[]; file?: File }> {
+type IntakeFormData = Omit<Partial<DailyReport>, 'staFiles' | 'rawSourceFiles'> & {
+  files?: File[];
+  file?: File;
+  staFiles?: File[];
+};
+
+async function dailyFromFormData(form: FormData): Promise<IntakeFormData> {
   const rawFiles = [
     ...form.getAll('files'),
     ...form.getAll('file'),
@@ -15,10 +21,17 @@ async function dailyFromFormData(form: FormData): Promise<Partial<DailyReport> &
   const files = Array.from(new Set(rawFiles));
   const file = files[0];
 
+  const rawStaFiles = [
+    ...form.getAll('staFiles'),
+    ...form.getAll('staFile'),
+  ].filter((f): f is File => f instanceof File);
+  const staFiles = Array.from(new Set(rawStaFiles));
+
   const dailyRaw = form.get('daily');
   if (typeof dailyRaw === 'string' && dailyRaw.trim()) {
-    const parsed = JSON.parse(dailyRaw) as Partial<DailyReport>;
-    return { ...parsed, files, file };
+    const parsed = JSON.parse(dailyRaw) as Record<string, unknown>;
+    const { files: _f, staFiles: _sf, ...rest } = parsed;
+    return { ...rest, files, file, staFiles } as IntakeFormData;
   }
   return {
     projectId: String(form.get('projectId') || ''),
@@ -32,7 +45,8 @@ async function dailyFromFormData(form: FormData): Promise<Partial<DailyReport> &
     staCompleted: String(form.get('staCompleted') || '') === 'true',
     files,
     file,
-  };
+    staFiles,
+  } as IntakeFormData;
 }
 
 export async function POST(req: Request) {
@@ -52,11 +66,14 @@ export async function POST(req: Request) {
     const contentType = req.headers.get('content-type') || '';
     let body: Partial<DailyReport>;
     let files: File[] = [];
+    let staFiles: File[] = [];
 
     if (contentType.includes('multipart/form-data')) {
       const parsed = await dailyFromFormData(await req.formData());
       files = parsed.files || (parsed.file ? [parsed.file] : []);
-      body = parsed;
+      staFiles = parsed.staFiles || [];
+      const { staFiles: _sf, files: _f, file: _fi, ...reportFields } = parsed;
+      body = reportFields;
     } else {
       body = (await req.json()) as Partial<DailyReport>;
     }
@@ -89,11 +106,30 @@ export async function POST(req: Request) {
           fileSize: f.size,
           mimeType: f.type || 'image/jpeg',
           uploadedAt: new Date().toISOString(),
+          category: 'daily_capture' as const,
         });
       }
       rawSourceFiles = attachments;
       rawSourceFileName = attachments.map((a) => a.fileName).join(', ');
       rawSourcePath = attachments[0].filePath;
+    }
+
+    let savedStaAttachments = body.staFiles ? [...body.staFiles] : [];
+    if (staFiles.length > 0) {
+      const staAttachments = [];
+      for (const f of staFiles) {
+        const fileBytes = Buffer.from(await f.arrayBuffer());
+        const savedPath = saveUpload(id, `STA-${f.name}`, fileBytes);
+        staAttachments.push({
+          fileName: f.name,
+          filePath: savedPath,
+          fileSize: f.size,
+          mimeType: f.type || 'image/jpeg',
+          uploadedAt: new Date().toISOString(),
+          category: 'sta_form' as const,
+        });
+      }
+      savedStaAttachments = staAttachments;
     }
 
     const report: DailyReport = {
@@ -114,7 +150,8 @@ export async function POST(req: Request) {
       notes: body.notes ?? '',
       tradesAndFavors: body.tradesAndFavors ?? '',
       isHpEmployee: body.isHpEmployee ?? false,
-      staCompleted: body.staCompleted ?? false,
+      staCompleted: savedStaAttachments.length > 0 || body.staCompleted || false,
+      staFiles: savedStaAttachments.length > 0 ? savedStaAttachments : undefined,
       emailRecipients: body.emailRecipients ?? [],
       rawSourceFileName,
       rawSourcePath,
