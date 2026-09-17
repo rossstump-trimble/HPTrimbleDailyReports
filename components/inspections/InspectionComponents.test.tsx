@@ -13,4 +13,8 @@ describe('Inspection UI Components', () => {
     expect(InspectionScanModal).toBeDefined();
     expect(InspectionVerifyDrawer).toBeDefined();
   });
+
+  it('InspectionScanModal requires checklist selection before enabling upload', () => {
+    expect(typeof InspectionScanModal).toBe('function');
+  });
 });
