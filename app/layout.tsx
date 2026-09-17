@@ -41,7 +41,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={cn("min-h-screen bg-background font-sans antialiased", openSans.variable, roboto.variable)}>
+      <body className={cn("min-h-screen bg-background font-sans antialiased", roboto.className, openSans.variable, roboto.variable)}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

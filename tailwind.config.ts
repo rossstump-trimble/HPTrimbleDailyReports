@@ -22,7 +22,8 @@ const config = {
     },
     extend: {
       fontFamily: {
-        sans: ["var(--font-montserrat)"],
+        sans: ["var(--font-roboto)", "var(--font-montserrat)", "sans-serif"],
+        roboto: ["var(--font-roboto)", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
