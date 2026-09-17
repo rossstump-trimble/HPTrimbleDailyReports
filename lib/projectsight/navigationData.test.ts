@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import { getSortedNavigationData, navigationData } from "./navigationData";
 
 describe("HPproto navigation", () => {
-  it("exposes projects, dashboard, bowling, daily report, and trade intake", () => {
+  it("exposes projects, dashboard, bowling, review queue, and daily intake", () => {
     const ids = navigationData.map((item) => item.id);
     expect(ids).toEqual([
       "projects",
       "dashboard",
+      "companies",
       "bowling-sheet",
+      "review-queue",
       "daily-report",
-      "trade-qr-intake",
     ]);
   });
 

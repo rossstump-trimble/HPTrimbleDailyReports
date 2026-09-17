@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { isAudioMedia } from '@/lib/audio-mime';
-import { geminiGenerate, GEMINI_TEXT_MODEL } from '@/lib/gemini-client';
-import { type ExtractedDaily } from '@/lib/extract-response';
+import { geminiGenerate, GEMINI_TEXT_MODEL, type GeminiPart } from '@/lib/gemini-client';
+import { type ExtractedDaily, type SourcePageText } from '@/lib/extract-response';
 import { transcribeAudioFromBuffer } from '@/lib/transcribe-audio';
 
 export type { ExtractedDaily } from '@/lib/extract-response';
@@ -16,16 +16,25 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
   "workerCount": number (headcount — total workers on site),
   "totalHours": number (total worker-hours for the day),
   "crewBreakdown": [{ "craft": "trade name", "count": number }],
+  "tierSubcontractors": [{ "name": "subcontractor company", "count": number, "trade": "trade/craft" }],
+  "tierSubsSummary": "summary of tier subcontractors or 'None'",
   "equipment": ["equipment item 1", "equipment item 2"],
   "notes": "combined string including delays, coordination items, discrepancies, and safety observations",
-  "staCompleted": true or false (Short-Term Anchor / safety task assignment completed)
+  "staCompleted": true or false (Short-Term Anchor / safety task assignment completed),
+  "ocrPages": ["verbatim text from page 1", "verbatim text from page 2"]
 }
+
+tradePartnerName must be the company printed or written on the form, even if it is unfamiliar. Never replace it with an example contractor name.
+
+ocrPages must transcribe ALL readable text on each page, in reading order. Use one array entry per page. If there is only one page, still return a one-element array. Do not put OCR into notes.
 
 Return ONLY the JSON object. No markdown fences, no explanation.`;
 
 const SPOKEN_EXTRACTION_PROMPT = `You are a construction daily report parser. The following is a speech-to-text transcript of a field foreman speaking their daily report.
 
 Extract structured data. Infer reasonable values when the speaker is informal (e.g. "eight guys" → workerCount 8, "STA is done" → staCompleted true).
+
+tradePartnerName must be the company the speaker named, even if it is unfamiliar or not a well-known contractor. Never replace it with an example company from a list.
 
 Return a JSON object with ONLY these fields (omit fields you cannot find or are unsure about):
 {
@@ -35,6 +44,8 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
   "workerCount": number (headcount — total workers on site),
   "totalHours": number (total worker-hours for the day),
   "crewBreakdown": [{ "craft": "trade name", "count": number }],
+  "tierSubcontractors": [{ "name": "subcontractor company", "count": number, "trade": "trade/craft" }],
+  "tierSubsSummary": "summary of tier subcontractors or 'None'",
   "equipment": ["equipment item 1", "equipment item 2"],
   "notes": "combined string including delays, coordination items, discrepancies, and safety observations",
   "staCompleted": true or false (Short-Term Anchor / safety task assignment completed)
@@ -62,6 +73,16 @@ export function parseGeminiDailyJson(text: string): ExtractedDaily {
         .filter(e => typeof e.craft === 'string' && typeof e.count === 'number')
         .map(e => ({ craft: e.craft as string, count: e.count as number }));
     }
+    if (Array.isArray(parsed.tierSubcontractors)) {
+      result.tierSubcontractors = (parsed.tierSubcontractors as { name?: unknown; count?: unknown; trade?: unknown }[])
+        .filter(e => typeof e.name === 'string' && typeof e.count === 'number')
+        .map(e => ({
+          name: e.name as string,
+          count: e.count as number,
+          trade: typeof e.trade === 'string' ? e.trade : undefined,
+        }));
+    }
+    if (typeof parsed.tierSubsSummary === 'string') result.tierSubsSummary = parsed.tierSubsSummary;
     if (Array.isArray(parsed.equipment)) {
       result.equipment = (parsed.equipment as unknown[]).filter(e => typeof e === 'string') as string[];
     }
@@ -70,11 +91,37 @@ export function parseGeminiDailyJson(text: string): ExtractedDaily {
     if (Array.isArray(parsed.emailRecipients)) {
       result.emailRecipients = (parsed.emailRecipients as unknown[]).filter(e => typeof e === 'string') as string[];
     }
+    const sourcePages = parseSourcePages(parsed);
+    if (sourcePages) result.sourcePages = sourcePages;
 
     return result;
   } catch {
     return {};
   }
+}
+
+function parseSourcePages(parsed: Record<string, unknown>): SourcePageText[] | undefined {
+  if (Array.isArray(parsed.ocrPages)) {
+    const pages: SourcePageText[] = [];
+    parsed.ocrPages.forEach((entry, index) => {
+      if (typeof entry === 'string' && entry.trim()) {
+        pages.push({ page: index + 1, text: entry });
+        return;
+      }
+      if (entry && typeof entry === 'object') {
+        const rec = entry as { page?: unknown; text?: unknown };
+        if (typeof rec.text === 'string' && rec.text.trim()) {
+          const page = typeof rec.page === 'number' && rec.page > 0 ? rec.page : index + 1;
+          pages.push({ page, text: rec.text });
+        }
+      }
+    });
+    return pages.length > 0 ? pages : undefined;
+  }
+  if (typeof parsed.ocrText === 'string' && parsed.ocrText.trim()) {
+    return [{ page: 1, text: parsed.ocrText }];
+  }
+  return undefined;
 }
 
 // ─── XLSX extraction ──────────────────────────────────────────────────────────
@@ -177,6 +224,14 @@ function extractFromXlsx(buffer: Buffer): ExtractedDaily {
   }
   if (noteParts.length > 0) result.notes = noteParts.join('; ');
 
+  const dump = allRows
+    .map((row) => row.map((cell) => cellStr(cell)).filter(Boolean).join('\t'))
+    .filter(Boolean)
+    .join('\n');
+  if (dump && Object.keys(result).length > 0) {
+    result.sourcePages = [{ page: 1, text: dump }];
+  }
+
   return result;
 }
 
@@ -192,6 +247,53 @@ async function extractWithGemini(buffer: Buffer, mimeType: string): Promise<Extr
   });
   if (!result?.text) return {};
   return parseGeminiDailyJson(result.text);
+}
+
+async function extractWithGeminiMultiple(
+  files: { buffer: Buffer; mimeType: string; filename: string }[],
+): Promise<ExtractedDaily> {
+  const parts: GeminiPart[] = [
+    { text: EXTRACTION_PROMPT },
+  ];
+
+  files.forEach((f, idx) => {
+    parts.push({
+      text: `\n--- PAGE / IMAGE ${idx + 1} of ${files.length} (Filename: ${f.filename}) ---\n`,
+    });
+    const safeMime =
+      f.mimeType && (f.mimeType.startsWith('image/') || f.mimeType === 'application/pdf')
+        ? f.mimeType
+        : 'image/jpeg';
+    parts.push({
+      inlineData: {
+        data: f.buffer.toString('base64'),
+        mimeType: safeMime,
+      },
+    });
+  });
+
+  const result = await geminiGenerate({
+    model: GEMINI_TEXT_MODEL,
+    parts,
+  });
+
+  if (!result?.text) return {};
+  const extracted = parseGeminiDailyJson(result.text);
+
+  if (files.length > 1) {
+    const existingPages = extracted.sourcePages ?? [];
+    const pageMap = new Map(existingPages.map((p) => [p.page, p.text]));
+    const fullPages: SourcePageText[] = [];
+    for (let i = 1; i <= files.length; i++) {
+      fullPages.push({
+        page: i,
+        text: pageMap.get(i) || `[Page ${i}: ${files[i - 1].filename}]`,
+      });
+    }
+    extracted.sourcePages = fullPages;
+  }
+
+  return extracted;
 }
 
 function mergeTranscriptNotes(extracted: ExtractedDaily, transcript: string): ExtractedDaily {
@@ -223,6 +325,70 @@ export async function extractDailyFromTranscript(
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
+
+export interface ExtractInputFile {
+  buffer: Buffer;
+  mimeType: string;
+  filename: string;
+}
+
+export async function extractDailyFromMultipleFiles(
+  files: ExtractInputFile[],
+): Promise<ExtractedDaily> {
+  if (!files || files.length === 0) return {};
+  if (files.length === 1) {
+    return extractDailyFromBuffer(files[0].buffer, files[0].mimeType, files[0].filename);
+  }
+
+  const audioFiles = files.filter((f) => isAudioMedia(f.mimeType, f.filename));
+  const docFiles = files.filter((f) => !isAudioMedia(f.mimeType, f.filename));
+
+  let combined: ExtractedDaily = {};
+
+  if (docFiles.length > 0) {
+    const xlsxFiles = docFiles.filter((f) => {
+      const lower = f.filename.toLowerCase();
+      return lower.endsWith('.xlsx') || lower.endsWith('.xls');
+    });
+    const imageDocFiles = docFiles.filter((f) => {
+      const lower = f.filename.toLowerCase();
+      return !lower.endsWith('.xlsx') && !lower.endsWith('.xls');
+    });
+
+    if (imageDocFiles.length === 1) {
+      combined = await extractDailyFromBuffer(
+        imageDocFiles[0].buffer,
+        imageDocFiles[0].mimeType,
+        imageDocFiles[0].filename,
+      );
+    } else if (imageDocFiles.length > 1) {
+      combined = await extractWithGeminiMultiple(imageDocFiles);
+    }
+
+    for (const xf of xlsxFiles) {
+      try {
+        const xExtracted = extractFromXlsx(xf.buffer);
+        combined = { ...xExtracted, ...combined };
+      } catch {}
+    }
+  }
+
+  for (const af of audioFiles) {
+    try {
+      const tr = await transcribeAudioFromBuffer(af.buffer, af.mimeType, af.filename);
+      if (tr) {
+        const aExtracted = await extractDailyFromTranscript(tr);
+        combined = {
+          ...combined,
+          ...aExtracted,
+          notes: [combined.notes, aExtracted.notes].filter(Boolean).join('; '),
+        };
+      }
+    } catch {}
+  }
+
+  return combined;
+}
 
 export async function extractDailyFromBuffer(
   buffer: Buffer,

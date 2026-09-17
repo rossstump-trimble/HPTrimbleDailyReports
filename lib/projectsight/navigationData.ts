@@ -1,5 +1,11 @@
 import { LucideIcon } from "lucide-react";
-import { ClipboardList, LayoutDashboard, LayoutGrid, TableProperties, QrCode } from "lucide-react";
+import {
+  Building2,
+  ClipboardCheck,
+  LayoutDashboard,
+  QrCode,
+  TableProperties,
+} from "lucide-react";
 import { IconType } from "react-icons";
 
 export interface MenuItem {
@@ -14,56 +20,58 @@ export interface MenuItem {
   subItems?: MenuItem[];
 }
 
-export const navigationData: MenuItem[] = [
-  {
-    id: "projects",
-    name: "Projects",
-    icon: LayoutGrid,
-    path: "/projects",
-    order: 10,
-  },
-  {
-    id: "dashboard",
-    name: "Dashboard",
-    icon: LayoutDashboard,
-    path: "/projects/cys07/dashboard",
-    order: 15,
-  },
-  {
-    id: "bowling-sheet",
-    name: "Bowling Sheet",
-    icon: TableProperties,
-    path: "/projects/cys07/bowling",
-    order: 20,
-  },
-  {
-    id: "daily-report",
-    name: "Daily Report",
-    icon: ClipboardList,
-    path: "/daily",
-    order: 25,
-  },
-  {
-    id: "trade-qr-intake",
-    name: "Trade QR Intake",
-    icon: QrCode,
-    path: "/intake/cys07",
-    order: 30,
-  },
-];
+export function getNavigationItemsForProject(projectId: string = "1025"): MenuItem[] {
+  return [
+    {
+      id: "projects",
+      name: "Projects",
+      icon: Building2,
+      path: "/projects",
+      order: 10,
+    },
+    {
+      id: "dashboard",
+      name: "Dashboard",
+      icon: LayoutDashboard,
+      path: `/projects/${projectId}/dashboard`,
+      order: 15,
+    },
+    {
+      id: "companies",
+      name: "Companies",
+      icon: Building2,
+      path: `/projects/${projectId}/companies`,
+      order: 18,
+    },
+    {
+      id: "bowling-sheet",
+      name: "Bowling Sheet",
+      icon: TableProperties,
+      path: `/projects/${projectId}/bowling`,
+      order: 20,
+    },
+    {
+      id: "review-queue",
+      name: "Review & Approvals",
+      icon: ClipboardCheck,
+      path: `/projects/${projectId}/review`,
+      order: 22,
+    },
+    {
+      id: "daily-report",
+      name: "Daily Intake",
+      icon: QrCode,
+      path: `/intake/${projectId}`,
+      order: 25,
+    },
+  ];
+}
+
+export const navigationData: MenuItem[] = getNavigationItemsForProject("1025");
 
 export function getSortedNavigationData(
-  data: MenuItem[] = navigationData
+  projectId: string = "1025"
 ): MenuItem[] {
-  const sortedData = [...data].sort((a, b) => a.order - b.order);
-
-  return sortedData.map((item) => {
-    if (item.subItems && item.subItems.length > 0) {
-      return {
-        ...item,
-        subItems: [...item.subItems].sort((a, b) => a.order - b.order),
-      };
-    }
-    return item;
-  });
+  const items = getNavigationItemsForProject(projectId);
+  return items.sort((a, b) => a.order - b.order);
 }

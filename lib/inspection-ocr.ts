@@ -161,7 +161,7 @@ export async function extractInspectionSheet(
 
     return {
       checklistNumber: matched.number,
-      checklistGuid: matched.psRecordId || matched.id,
+      checklistGuid: matched.psRecordId || ('id' in matched ? String((matched as { id?: unknown }).id) : matched.psRecordId),
       title: matched.title,
       inspectorName: 'Field Superintendent',
       date: new Date().toISOString().split('T')[0],
