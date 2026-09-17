@@ -12,21 +12,26 @@ import {
   Building2,
   Users,
   Clock,
-  ArrowRight,
   ShieldCheck,
   RefreshCw,
   FileText,
   Save,
-  Truck,
+  Trash2,
+  CloudSun,
+  RotateCcw,
+  Wind,
+  Droplets,
+  Thermometer,
+  X,
+  EyeOff,
   Wrench,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { SuperdailyReport, TradeFavor } from "@/types/superdaily";
+import type { SuperdailyReport, TradeWorkSummary } from "@/types/superdaily";
 import { SuperdailyPrintDocument } from "@/components/superdaily/SuperdailyPrintDocument";
 
 function todayISO(): string {
@@ -43,13 +48,19 @@ export default function SuperdailyPage() {
   const [report, setReport] = useState<SuperdailyReport | null>(null);
   const [reportsCount, setReportsCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
+
+  // Inline overview editing state
+  const [isEditingOverview, setIsEditingOverview] = useState<boolean>(false);
   const [editableSummary, setEditableSummary] = useState<string>("");
+
+  // Pre-export soft-deletion state
+  const [hiddenSections, setHiddenSections] = useState<string[]>([]);
+  const [hiddenTradeIds, setHiddenTradeIds] = useState<string[]>([]);
 
   const handleGenerate = useCallback(async (targetDate: string = date) => {
     setLoading(true);
     setError(null);
-    setIsEditing(false);
+    setIsEditingOverview(false);
     try {
       const res = await fetch(`/api/projects/${projectId}/superdaily/summarize`, {
         method: "POST",
@@ -65,6 +76,8 @@ export default function SuperdailyPage() {
       setReport(data.report);
       setReportsCount(data.reportsCount ?? 0);
       setEditableSummary(data.report.executiveSummary);
+      setHiddenSections([]);
+      setHiddenTradeIds([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error generating superdaily");
     } finally {
@@ -83,15 +96,42 @@ export default function SuperdailyPage() {
     }
   };
 
-  const handleSaveEdits = () => {
+  const handleSaveOverview = () => {
     if (report) {
       setReport({
         ...report,
         executiveSummary: editableSummary,
       });
-      setIsEditing(false);
+      setIsEditingOverview(false);
     }
   };
+
+  const handleCancelOverview = () => {
+    if (report) {
+      setEditableSummary(report.executiveSummary);
+      setIsEditingOverview(false);
+    }
+  };
+
+  const toggleSection = (sectionKey: string) => {
+    setHiddenSections((prev) =>
+      prev.includes(sectionKey) ? prev.filter((k) => k !== sectionKey) : [...prev, sectionKey],
+    );
+  };
+
+  const toggleTrade = (tradeId: string) => {
+    setHiddenTradeIds((prev) =>
+      prev.includes(tradeId) ? prev.filter((id) => id !== tradeId) : [...prev, tradeId],
+    );
+  };
+
+  const handleRestoreAll = () => {
+    setHiddenSections([]);
+    setHiddenTradeIds([]);
+  };
+
+  const totalHiddenCount = hiddenSections.length + hiddenTradeIds.length;
+  const visibleTrades = report?.tradeSummaries.filter((t) => !hiddenTradeIds.includes(t.tradePartnerId)) || [];
 
   return (
     <>
@@ -111,7 +151,7 @@ export default function SuperdailyPage() {
       `}</style>
 
       {/* Screen Interface */}
-      <div className="p-6 max-w-7xl mx-auto space-y-6 print:hidden">
+      <div className="p-6 max-w-7xl mx-auto space-y-6 print:hidden pb-20">
         {/* Top Header Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
           <div>
@@ -127,7 +167,7 @@ export default function SuperdailyPage() {
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Cross-trade daily summary, site activities, manpower, and inter-trade coordination.
+              Authoritative daily site briefing, weather conditions, manpower, and trade work execution.
             </p>
           </div>
 
@@ -153,26 +193,16 @@ export default function SuperdailyPage() {
 
             {report && (
               <>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (isEditing) handleSaveEdits();
-                    else setIsEditing(true);
-                  }}
-                  className="gap-1.5"
-                >
-                  {isEditing ? (
-                    <>
-                      <Save className="h-4 w-4 text-emerald-600" />
-                      <span>Save Review</span>
-                    </>
-                  ) : (
-                    <>
-                      <Edit3 className="h-4 w-4" />
-                      <span>Edit Notes</span>
-                    </>
-                  )}
-                </Button>
+                {totalHiddenCount > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={handleRestoreAll}
+                    className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    <span>Restore ({totalHiddenCount})</span>
+                  </Button>
+                )}
 
                 <Button
                   variant="outline"
@@ -197,6 +227,78 @@ export default function SuperdailyPage() {
         {/* Content View */}
         {report && (
           <div className="space-y-6">
+            {/* Weather Card */}
+            {!hiddenSections.includes("weather") && report.weather && (
+              <Card className="border-sky-200 dark:border-sky-900 bg-sky-50/50 dark:bg-sky-950/20">
+                <CardHeader className="pb-2 pt-3 px-4 flex flex-row items-center justify-between space-y-0">
+                  <div className="flex items-center gap-2">
+                    <CloudSun className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+                    <CardTitle className="text-sm font-semibold text-sky-950 dark:text-sky-200">
+                      Site Weather Observations
+                    </CardTitle>
+                    <Badge variant="secondary" className="text-xs bg-sky-100 dark:bg-sky-900 text-sky-800 dark:text-sky-200">
+                      {report.weather.conditions}
+                    </Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleSection("weather")}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-red-600 gap-1"
+                    title="Remove weather from export"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Remove</span>
+                  </Button>
+                </CardHeader>
+                <CardContent className="px-4 pb-3 pt-1">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Thermometer className="h-4 w-4 text-amber-500" />
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Temperature</span>
+                        <span className="font-semibold text-foreground">
+                          {report.weather.tempMax != null && report.weather.tempMin != null
+                            ? `High ${report.weather.tempMax}°F / Low ${report.weather.tempMin}°F (${report.weather.temp}°F avg)`
+                            : `${report.weather.temp}°F`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Wind className="h-4 w-4 text-blue-500" />
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Wind Velocity</span>
+                        <span className="font-semibold text-foreground">{report.weather.windVelocity} mph</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Droplets className="h-4 w-4 text-sky-500" />
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Humidity</span>
+                        <span className="font-semibold text-foreground">{report.weather.humidity}%</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <CloudSun className="h-4 w-4 text-indigo-500" />
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Precipitation</span>
+                        <span className="font-semibold text-foreground">
+                          {report.weather.rainfall > 0
+                            ? `Rain: ${report.weather.rainfall.toFixed(2)} in.`
+                            : report.weather.snowfall > 0
+                            ? `Snow: ${report.weather.snowfall.toFixed(1)} in.`
+                            : "None"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card>
@@ -205,9 +307,14 @@ export default function SuperdailyPage() {
                     <Building2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">Active Trades</p>
-                    <p className="text-xl font-bold text-foreground mt-0.5">{report.activeTradeCount}</p>
-                    <p className="text-[11px] text-muted-foreground">{reportsCount} trade reports filed</p>
+                    <p className="text-xs text-muted-foreground font-medium">Reporting Trades</p>
+                    <p className="text-xl font-bold text-foreground mt-0.5">
+                      {report.activeTradeCount}
+                      <span className="text-xs text-muted-foreground font-normal ml-1">
+                        / {report.expectedTradeCount || report.activeTradeCount} expected
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">{reportsCount} dailies on file</p>
                   </div>
                 </CardContent>
               </Card>
@@ -218,9 +325,9 @@ export default function SuperdailyPage() {
                     <Users className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">Total Site Headcount</p>
+                    <p className="text-xs text-muted-foreground font-medium">Site Headcount</p>
                     <p className="text-xl font-bold text-foreground mt-0.5">{report.totalHeadcount}</p>
-                    <p className="text-[11px] text-muted-foreground">workers on site</p>
+                    <p className="text-[11px] text-muted-foreground">craftspersons on site</p>
                   </div>
                 </CardContent>
               </Card>
@@ -240,7 +347,13 @@ export default function SuperdailyPage() {
 
               <Card>
                 <CardContent className="p-4 flex items-center gap-3">
-                  <div className={`p-2.5 rounded-lg ${report.safetyAndStas.allCompleted ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/60'}`}>
+                  <div
+                    className={`p-2.5 rounded-lg ${
+                      report.safetyAndStas.allCompleted
+                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60"
+                        : "bg-amber-50 text-amber-600 dark:bg-amber-950/60"
+                    }`}
+                  >
                     <ShieldCheck className="h-5 w-5" />
                   </div>
                   <div>
@@ -254,207 +367,373 @@ export default function SuperdailyPage() {
               </Card>
             </div>
 
-            {/* Executive Summary Card */}
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-[#0063a3]" />
-                    <span>Executive Site Overview</span>
-                  </CardTitle>
-                  <span className="text-xs text-muted-foreground">Date: {report.date}</span>
-                </div>
-                <CardDescription>
-                  Synthesized jobsite status and tempo from all active trade partner submissions.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isEditing ? (
-                  <div className="space-y-2">
-                    <Label className="text-xs">Edit Superintendent Summary</Label>
-                    <Textarea
-                      rows={4}
-                      value={editableSummary}
-                      onChange={(e) => setEditableSummary(e.target.value)}
-                      className="text-sm font-sans"
-                    />
-                  </div>
-                ) : (
-                  <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap bg-muted/20 p-3.5 rounded-lg border border-border">
-                    {report.executiveSummary}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Inter-Trade Coordination & Favors */}
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Wrench className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    <span>Inter-Trade Coordination & Favors</span>
-                  </CardTitle>
-                  <Badge variant="secondary" className="text-xs">
-                    {report.interTradeFavors.length} Identified
-                  </Badge>
-                </div>
-                <CardDescription>
-                  Collaborative actions detected between trades (equipment sharing, crane offloading, staging handoffs).
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {report.interTradeFavors.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic py-2">
-                    No explicit equipment loans or mutual trade favors identified in today&apos;s daily reports.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {report.interTradeFavors.map((favor: TradeFavor, idx: number) => (
-                      <div
-                        key={idx}
-                        className="p-3.5 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                            <span className="text-[#0063a3] dark:text-blue-400">{favor.providingTrade}</span>
-                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-amber-700 dark:text-amber-300">{favor.receivingTrade}</span>
-                          </div>
-                          <Badge variant="outline" className="text-[10px] uppercase font-semibold border-amber-300 text-amber-800 dark:text-amber-200">
-                            {favor.type.replace('_', ' ')}
-                          </Badge>
+            {/* Missing Submissions Alert Banner (On Bowling Sheet without a Daily) */}
+            {!hiddenSections.includes("missing-trades") &&
+              report.missingTrades &&
+              report.missingTrades.length > 0 && (
+                <Card className="border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20">
+                  <CardHeader className="pb-2 pt-3 px-4 flex flex-row items-center justify-between space-y-0">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <CardTitle className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                        Missing Submissions: Scheduled On Bowling Sheet
+                      </CardTitle>
+                      <Badge variant="outline" className="border-amber-400 text-amber-800 dark:text-amber-200 text-xs font-semibold">
+                        {report.missingTrades.length} Trade(s) Delinquent
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleSection("missing-trades")}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-red-600 gap-1"
+                      title="Hide missing trades from export"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Remove</span>
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 pt-1">
+                    <p className="text-xs text-amber-800 dark:text-amber-300 mb-2">
+                      The following active trade partners are on the project bowling matrix but have not filed a daily report for {report.date}:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {report.missingTrades.map((m, idx) => (
+                        <div
+                          key={idx}
+                          className="px-2.5 py-1 rounded bg-white dark:bg-background border border-amber-300 dark:border-amber-800 text-xs font-medium text-foreground flex items-center gap-1.5 shadow-sm"
+                        >
+                          <span className="font-bold">{m.tradePartnerName}</span>
+                          {m.category && (
+                            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.2 rounded">
+                              {m.category}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-foreground leading-normal">
-                          {favor.description}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Subcontractor Work Breakdown Table */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-[#0063a3]" />
-                  <span>Subcontractor Trade Activities</span>
-                </CardTitle>
-                <CardDescription>
-                  Detailed labor breakdown, work performed, and equipment on site.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-muted/40 text-muted-foreground text-xs border-b border-border uppercase">
-                      <tr>
-                        <th className="py-2.5 px-4 font-semibold">Trade Partner</th>
-                        <th className="py-2.5 px-3 font-semibold text-center">Crew</th>
-                        <th className="py-2.5 px-3 font-semibold text-center">Hours</th>
-                        <th className="py-2.5 px-4 font-semibold">Location & Work Performed</th>
-                        <th className="py-2.5 px-4 font-semibold">Equipment</th>
-                        <th className="py-2.5 px-3 font-semibold text-center">STA</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border text-xs">
-                      {report.tradeSummaries.map((trade, idx) => (
-                        <tr key={idx} className="hover:bg-muted/20">
-                          <td className="py-3 px-4 font-bold text-foreground">
-                            {trade.tradePartnerName}
-                          </td>
-                          <td className="py-3 px-3 text-center text-foreground font-semibold">
-                            {trade.workerCount}
-                          </td>
-                          <td className="py-3 px-3 text-center text-foreground">
-                            {trade.totalHours}
-                          </td>
-                          <td className="py-3 px-4 text-foreground max-w-xs">
-                            <span className="font-semibold text-muted-foreground block mb-0.5">
-                              {trade.locationDescription}
-                            </span>
-                            <span className="text-xs leading-normal">
-                              {trade.workPerformed}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-muted-foreground">
-                            {trade.equipment && trade.equipment.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {trade.equipment.map((eq, eqIdx) => (
-                                  <Badge key={eqIdx} variant="secondary" className="text-[10px] font-normal">
-                                    {eq}
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : (
-                              <span>—</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            {trade.staCompleted ? (
-                              <span className="inline-flex items-center justify-center text-emerald-600 font-bold" title="STA Safety Completed">
-                                <CheckCircle2 className="h-4 w-4" />
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center justify-center text-amber-600 font-bold" title="STA Incomplete or Unconfirmed">
-                                <AlertTriangle className="h-4 w-4" />
-                              </span>
-                            )}
-                          </td>
-                        </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-            {/* Delays & Safety Notes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Editable Executive Site Overview Card */}
+            {!hiddenSections.includes("overview") && (
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-700 dark:text-red-400">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>Reported Delays & Roadblocks</span>
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-[#0063a3]" />
+                      <span>Executive Site Overview</span>
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground mr-1">Date: {report.date}</span>
+                      {!isEditingOverview ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsEditingOverview(true)}
+                          className="h-7 px-2 text-xs gap-1 text-[#0063a3] hover:text-[#004e82]"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                          <span>Edit Overview</span>
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={handleSaveOverview}
+                            className="h-7 px-2 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            <Save className="h-3.5 w-3.5" />
+                            <span>Save</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCancelOverview}
+                            className="h-7 px-2 text-xs gap-1 text-muted-foreground"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            <span>Cancel</span>
+                          </Button>
+                        </div>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleSection("overview")}
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-red-600 gap-1"
+                        title="Remove overview section"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Remove</span>
+                      </Button>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    Synthesized jobsite tempo, critical operations, and milestones achieved.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {report.delaysAndRoadblocks.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">
-                      No operational delays, material shortages, or weather stoppages reported for this date.
-                    </p>
+                  {isEditingOverview ? (
+                    <div className="space-y-3">
+                      <Textarea
+                        rows={5}
+                        value={editableSummary}
+                        onChange={(e) => setEditableSummary(e.target.value)}
+                        className="text-sm font-sans leading-relaxed"
+                        placeholder="Enter executive site overview..."
+                        autoFocus
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={handleCancelOverview}>
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSaveOverview}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          <span>Save Overview</span>
+                        </Button>
+                      </div>
+                    </div>
                   ) : (
-                    <ul className="list-disc pl-4 space-y-1.5 text-xs text-foreground">
-                      {report.delaysAndRoadblocks.map((delay, idx) => (
-                        <li key={idx} className="leading-normal">{delay}</li>
-                      ))}
-                    </ul>
+                    <div
+                      onClick={() => setIsEditingOverview(true)}
+                      className="group relative cursor-pointer text-sm leading-relaxed text-foreground whitespace-pre-wrap bg-muted/20 p-4 rounded-lg border border-border hover:border-[#0063a3]/40 transition-colors"
+                      title="Click to edit overview"
+                    >
+                      <p>{report.executiveSummary}</p>
+                      <span className="absolute bottom-2 right-2 text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                        <Edit3 className="h-3 w-3" /> Click to edit
+                      </span>
+                    </div>
                   )}
                 </CardContent>
               </Card>
+            )}
 
+            {/* Subcontractor Work Breakdown (Expanded Trade Cards) */}
+            {!hiddenSections.includes("trades") && (
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                    <span>Safety Briefing & STA Status</span>
-                  </CardTitle>
+                <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-[#0063a3]" />
+                      <span>Trade Contractor Work & Field Activities</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Individual work breakdown, detailed activities, manpower, and equipment per subcontractor.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleSection("trades")}
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-red-600 gap-1"
+                    title="Remove trade contractor section"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Remove All Trades</span>
+                  </Button>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-foreground leading-normal">
-                    {report.safetyAndStas.staNotes}
-                  </p>
+                <CardContent className="space-y-4">
+                  {visibleTrades.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground text-sm border border-dashed rounded-lg">
+                      No active trade cards.{" "}
+                      {hiddenTradeIds.length > 0 && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          onClick={() => setHiddenTradeIds([])}
+                          className="text-[#0063a3]"
+                        >
+                          Restore {hiddenTradeIds.length} hidden trade(s)
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    visibleTrades.map((trade: TradeWorkSummary) => (
+                      <div
+                        key={trade.tradePartnerId}
+                        className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-3 transition-all hover:shadow"
+                      >
+                        {/* Trade Card Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-foreground text-sm">
+                              {trade.tradePartnerName}
+                            </span>
+                            {trade.category && (
+                              <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
+                                {trade.category}
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>
+                                Crew: <strong className="text-foreground">{trade.workerCount}</strong>
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Hours: <strong className="text-foreground">{trade.totalHours} hrs</strong>
+                              </span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                STA:{" "}
+                                {trade.staCompleted ? (
+                                  <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Complete</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-600 font-bold flex items-center gap-0.5">
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                    <span>Check</span>
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleTrade(trade.tradePartnerId)}
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                              title="Delete this trade card before export"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Trade Card Body: Verbose Work Narrative */}
+                        <div className="space-y-1.5 text-xs text-foreground">
+                          <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+                            <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                            <span>Location: {trade.locationDescription}</span>
+                          </div>
+                          <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap pl-5 border-l-2 border-muted">
+                            {trade.workPerformed}
+                          </p>
+                        </div>
+
+                        {/* Trade Card Footer: Equipment & Notes */}
+                        {trade.equipment && trade.equipment.length > 0 && (
+                          <div className="flex items-center gap-2 pt-1 border-t border-border/50 text-xs">
+                            <Wrench className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-muted-foreground font-medium text-[11px]">Equipment:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {trade.equipment.map((eq, eqIdx) => (
+                                <Badge key={eqIdx} variant="secondary" className="text-[10px] font-normal py-0">
+                                  {eq}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </CardContent>
               </Card>
+            )}
+
+            {/* Delays & Safety Notes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {!hiddenSections.includes("delays") && (
+                <Card>
+                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-700 dark:text-red-400">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>Reported Delays & Roadblocks</span>
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleSection("delays")}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-red-600 gap-1"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {report.delaysAndRoadblocks.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">
+                        No operational delays, material shortages, or weather stoppages reported for this date.
+                      </p>
+                    ) : (
+                      <ul className="list-disc pl-4 space-y-1.5 text-xs text-foreground">
+                        {report.delaysAndRoadblocks.map((delay, idx) => (
+                          <li key={idx} className="leading-normal">
+                            {delay}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {!hiddenSections.includes("safety") && (
+                <Card>
+                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      <span>Safety Briefing & STA Status</span>
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleSection("safety")}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-red-600 gap-1"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-foreground leading-normal">
+                      {report.safetyAndStas.staNotes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         )}
       </div>
 
+      {/* Floating Bottom Undo/Restore Bar */}
+      {totalHiddenCount > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 print:hidden bg-slate-900 text-white px-4 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs">
+          <EyeOff className="h-4 w-4 text-amber-400" />
+          <span>
+            <strong>{totalHiddenCount}</strong> item(s) hidden from report & export
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleRestoreAll}
+            className="h-6 px-2 text-xs text-amber-300 hover:text-white hover:bg-slate-800"
+          >
+            Restore All
+          </Button>
+        </div>
+      )}
+
       {/* Dedicated Vector Printable Document (rendered when printing) */}
-      {report && <SuperdailyPrintDocument report={report} />}
+      {report && (
+        <SuperdailyPrintDocument
+          report={report}
+          hiddenSectionKeys={hiddenSections}
+          hiddenTradeIds={hiddenTradeIds}
+        />
+      )}
     </>
   );
 }

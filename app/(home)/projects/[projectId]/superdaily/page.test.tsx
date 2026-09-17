@@ -26,13 +26,35 @@ describe('Superdaily Integration & Print Component', () => {
       totalHeadcount: 15,
       totalManHours: 120,
       activeTradeCount: 3,
-      tradeSummaries: [],
-      interTradeFavors: [
+      expectedTradeCount: 4,
+      weather: {
+        temp: 74,
+        tempMax: 80,
+        tempMin: 65,
+        conditions: 'Sunny',
+        humidity: 35,
+        windVelocity: 8,
+        rainfall: 0,
+        snowfall: 0,
+        weatherNotes: 'Sunny, High 80°F, Low 65°F.',
+      },
+      missingTrades: [
         {
-          providingTrade: 'Apex Painting',
-          receivingTrade: 'Drywall Sub',
-          description: 'Loaned scissor lift',
-          type: 'equipment_sharing',
+          tradePartnerId: 'drywall-sub',
+          tradePartnerName: 'Drywall Specialist Co',
+          category: 'Drywall',
+        },
+      ],
+      tradeSummaries: [
+        {
+          tradePartnerId: 'apex-painting',
+          tradePartnerName: 'Apex Painting',
+          workerCount: 4,
+          totalHours: 32,
+          locationDescription: 'Corridor Level 2',
+          workPerformed: 'Crews applied prime and finish coats across drywall partitions.',
+          equipment: ['Ladders'],
+          staCompleted: true,
         },
       ],
       delaysAndRoadblocks: [],
@@ -43,7 +65,12 @@ describe('Superdaily Integration & Print Component', () => {
       },
     };
 
-    const element = SuperdailyPrintDocument({ report: sampleReport });
+    const element = SuperdailyPrintDocument({
+      report: sampleReport,
+      hiddenSectionKeys: ['weather'],
+      hiddenTradeIds: ['other-trade'],
+    });
+
     expect(element).toBeDefined();
     expect(element.props.className).toContain('superdaily-print-only');
   });
