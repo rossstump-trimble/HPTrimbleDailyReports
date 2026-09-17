@@ -10,6 +10,10 @@ export interface Fog617Capture {
   notes?: string;
   staCompleted?: boolean;
   staFiles?: { fileName: string; filePath: string }[];
+  tierSubcontractors?: string[];
+  tierSubsSummary?: string;
+  tradesAndFavors?: string;
+  isHpEmployee?: boolean;
 }
 
 const TITLE_MAX = 120;
