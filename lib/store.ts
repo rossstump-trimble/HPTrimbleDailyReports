@@ -11,6 +11,7 @@ import {
   ProjectCompany,
   CompanyContact,
   MAX_DAILY_REPORTS,
+  InspectionRecord,
 } from '@/types/hpproto';
 import type { PunchItem, PunchCommitActionItem, PunchCommitResult } from '@/types/punch';
 
@@ -896,4 +897,57 @@ export function batchCommitPunchItems(
     (p) => p.projectId.toLowerCase() === projectId.toLowerCase(),
   );
   return { success: failedCount === 0, createdCount, updatedCount, failedCount, items, errors };
+}
+
+export function getInspectionsForProject(
+  projectId: string,
+  filePath: string = DEFAULT_DB_PATH,
+): InspectionRecord[] {
+  const store = getStore(filePath);
+  return (store.inspections || []).filter(
+    (ins) => ins.projectId.toLowerCase() === projectId.toLowerCase(),
+  );
+}
+
+export function getInspectionById(
+  inspectionId: string,
+  filePath: string = DEFAULT_DB_PATH,
+): InspectionRecord | null {
+  const store = getStore(filePath);
+  return (store.inspections || []).find((ins) => ins.id === inspectionId) || null;
+}
+
+export function saveInspectionRecord(
+  record: InspectionRecord,
+  filePath: string = DEFAULT_DB_PATH,
+): InspectionRecord {
+  const store = getStore(filePath);
+  if (!store.inspections) store.inspections = [];
+  const idx = store.inspections.findIndex((ins) => ins.id === record.id);
+  if (idx >= 0) {
+    store.inspections[idx] = record;
+  } else {
+    store.inspections.push(record);
+  }
+  saveStore(store, filePath);
+  return record;
+}
+
+export function updateInspectionRecord(
+  inspectionId: string,
+  updates: Partial<InspectionRecord>,
+  filePath: string = DEFAULT_DB_PATH,
+): InspectionRecord | null {
+  const store = getStore(filePath);
+  if (!store.inspections) return null;
+  const idx = store.inspections.findIndex((ins) => ins.id === inspectionId);
+  if (idx < 0) return null;
+  const updated: InspectionRecord = {
+    ...store.inspections[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  store.inspections[idx] = updated;
+  saveStore(store, filePath);
+  return updated;
 }

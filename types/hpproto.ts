@@ -1,8 +1,12 @@
 import type { PunchItem } from '@/types/punch';
+import type { InspectionRecord } from '@/types/inspections';
+
+export * from '@/types/inspections';
 
 export interface TierSubcontractor {
   name: string;
-  workerCount: number;
+  count: number;
+  workerCount?: number;
   trade?: string;
 }
 
@@ -53,6 +57,14 @@ export interface CrewEntry {
   count: number;
 }
 
+export interface DailyReportAttachment {
+  fileName: string;
+  filePath: string;
+  fileSize?: number;
+  mimeType?: string;
+  uploadedAt?: string;
+}
+
 export interface DailyReport {
   id: string;
   projectId: string;
@@ -73,6 +85,7 @@ export interface DailyReport {
   emailRecipients: string[];
   rawSourceFileName?: string;
   rawSourcePath?: string;
+  rawSourceFiles?: DailyReportAttachment[];
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   approvedAt?: string;
   approvedBy?: string;
@@ -116,6 +129,7 @@ export interface StoreData {
   projects: Project[];
   dailyReports: DailyReport[];
   punchItems?: PunchItem[];
+  inspections?: InspectionRecord[];
 }
 
 export const MAX_DAILY_REPORTS = 2000;

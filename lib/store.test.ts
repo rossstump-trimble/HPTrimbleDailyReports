@@ -20,8 +20,11 @@ import {
   setProjectCompanies,
   toggleCompanyTracking,
   addCompanyContact,
+  getInspectionsForProject,
+  saveInspectionRecord,
+  updateInspectionRecord,
 } from './store';
-import type { CompanyContact, ProjectCompany } from '@/types/hpproto';
+import type { CompanyContact, ProjectCompany, InspectionRecord } from '@/types/hpproto';
 import fs from 'fs';
 import path from 'path';
 
@@ -118,6 +121,68 @@ describe('HPproto Local Store', () => {
       ?.cells.find(c => c.date === '2026-08-20');
     expect(updatedCell?.workerCount).toBe(8);
     expect(updatedCell?.totalHours).toBe(64);
+  });
+
+  it('preserves separate lines for multiple people from the same company without overwriting', () => {
+    updateProjectTradePartners('1025', [{ id: 'titan-electric', name: 'Titan Electric' }], TEST_DB_PATH);
+
+    // Submitter 1: Carlos Mendoza
+    const report1 = {
+      id: 'dr-carlos-1',
+      projectId: '1025',
+      tradePartnerId: 'titan-electric',
+      tradePartnerName: 'Titan Electric',
+      date: '2026-08-20',
+      submittedAt: new Date().toISOString(),
+      submittedBy: 'Carlos Mendoza',
+      emailRecipients: ['carlos@titan.com'],
+      locationDescription: 'Floor 1 Panels',
+      workerCount: 4,
+      totalHours: 32,
+      crewBreakdown: [],
+      equipment: [],
+      notes: '',
+      staCompleted: true,
+    };
+
+    // Submitter 2: Dave Miller from same company on same date
+    const report2 = {
+      id: 'dr-dave-1',
+      projectId: '1025',
+      tradePartnerId: 'titan-electric',
+      tradePartnerName: 'Titan Electric',
+      date: '2026-08-20',
+      submittedAt: new Date().toISOString(),
+      submittedBy: 'Dave Miller',
+      emailRecipients: ['dave@titan.com'],
+      locationDescription: 'Floor 2 Lighting',
+      workerCount: 6,
+      totalHours: 48,
+      crewBreakdown: [],
+      equipment: [],
+      notes: '',
+      staCompleted: true,
+    };
+
+    upsertDailyReport(report1, TEST_DB_PATH);
+    upsertDailyReport(report2, TEST_DB_PATH);
+
+    // Verify both reports exist in the database
+    const store = getStore(TEST_DB_PATH);
+    const titanReports = store.dailyReports.filter(r => r.tradePartnerId === 'titan-electric' && r.date === '2026-08-20');
+    expect(titanReports).toHaveLength(2);
+
+    // Verify Bowling Matrix generates separate lines for each person
+    const matrix = getBowlingMatrix('1025', '2026-08', TEST_DB_PATH);
+    const titanRows = matrix.rows.filter(r => r.tradePartner.companyName === 'Titan Electric' || r.tradePartner.id.startsWith('titan-electric'));
+    expect(titanRows).toHaveLength(2);
+    expect(titanRows.some(r => r.tradePartner.name.includes('Carlos Mendoza'))).toBe(true);
+    expect(titanRows.some(r => r.tradePartner.name.includes('Dave Miller'))).toBe(true);
+
+    const carlosRow = titanRows.find(r => r.tradePartner.name.includes('Carlos Mendoza'));
+    const daveRow = titanRows.find(r => r.tradePartner.name.includes('Dave Miller'));
+    expect(carlosRow?.cells.find(c => c.date === '2026-08-20')?.workerCount).toBe(4);
+    expect(daveRow?.cells.find(c => c.date === '2026-08-20')?.workerCount).toBe(6);
   });
 
   it('approves a daily report, records approver metadata, and auto-adds company to trade partners', () => {
@@ -428,4 +493,32 @@ describe('HPproto Local Store', () => {
     expect(titan?.contacts[0].email).toBe('other@titan.com');
   });
 
+  it('saves, retrieves, and updates inspection records', () => {
+    const record: InspectionRecord = {
+      id: 'insp-1',
+      projectId: '1025',
+      psRecordId: 'ps-rec-1',
+      number: 'CK-0042',
+      title: 'Pre-Pour Concrete Inspection',
+      status: 'open',
+      items: [
+        {
+          id: 'item-1',
+          itemNumber: 1,
+          prompt: 'Rebar placement verified',
+          result: 'Pass',
+        },
+      ],
+      source: 'upload',
+      createdAt: '2026-09-17T12:00:00.000Z',
+      updatedAt: '2026-09-17T12:00:00.000Z',
+    };
+
+    saveInspectionRecord(record, TEST_DB_PATH);
+    const list = getInspectionsForProject('1025', TEST_DB_PATH);
+    expect(list.some((r) => r.id === 'insp-1')).toBe(true);
+
+    const updated = updateInspectionRecord('insp-1', { status: 'approved' }, TEST_DB_PATH);
+    expect(updated?.status).toBe('approved');
+  });
 });
