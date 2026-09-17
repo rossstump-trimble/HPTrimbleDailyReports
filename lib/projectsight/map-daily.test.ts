@@ -57,4 +57,39 @@ describe('mapFog617ToProjectSightBody', () => {
     expect(body.Date).toBe('2026-09-17');
     expect(body.Title).toBe('Apex Electric');
   });
+
+  it('outputs separate DailyWorks items for each craft with exact total hours', () => {
+    const capture: Fog617Capture = {
+      tradePartnerName: 'Titan Iron',
+      submittedBy: 'Evan Grimm',
+      date: '2026-09-17',
+      locationDescription: 'Sector B Column Line 4',
+      crewBreakdown: [
+        { craft: 'Ironworker Journeyman', count: 4, hoursPerWorker: 8, totalHours: 32 },
+        { craft: 'Welder', count: 2, hoursPerWorker: 10, totalHours: 20 },
+      ],
+      workerCount: 6,
+      totalHours: 52,
+      staCompleted: true,
+    };
+
+    const body = mapFog617ToProjectSightBody(capture);
+    expect(body.Description).toContain('Reporter: Evan Grimm');
+    expect(body.Description).toContain('Ironworker Journeyman (4) @ 8h = 32h');
+    expect(body.Description).toContain('Welder (2) @ 10h = 20h');
+    expect(body.TotalWorkersApproved).toBe(6);
+    expect(body.TotalWorkApproved).toBe(52);
+
+    const works = body.DailyWorks as Record<string, unknown>[];
+    expect(works).toHaveLength(2);
+    expect(works[0].Trade).toBe('Ironworker Journeyman');
+    expect(works[0].Workers).toBe(4);
+    expect(works[0].HoursPerDay).toBe(8);
+    expect(works[0].TotalWork).toBe(32);
+
+    expect(works[1].Trade).toBe('Welder');
+    expect(works[1].Workers).toBe(2);
+    expect(works[1].HoursPerDay).toBe(10);
+    expect(works[1].TotalWork).toBe(20);
+  });
 });
