@@ -102,9 +102,9 @@ function LoginForm() {
         {/* Logo */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/projectsight_logo.svg"
-          alt="ProjectSight"
-          style={{ width: 180, height: "auto" }}
+          src="/trimble-logo-blue.png"
+          alt="Trimble"
+          style={{ width: 150, height: "auto" }}
         />
 
         <div className="text-center">

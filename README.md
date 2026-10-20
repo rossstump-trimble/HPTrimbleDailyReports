@@ -1,149 +1,88 @@
-# ProjectSight Web Prototype
+# Hensel Phelps & Trimble Field Operations Prototype
 
-HP Demo Day prototype: ProjectSight-styled bowling sheet and trade daily intake.
+Modern jobsite daily reporting, checklist inspection digitization, punch list processing, and superintendent Superdaily review prototype built for Hensel Phelps and Trimble.
 
-**Local UI work starts here:** [LOCAL-DEV.md](./LOCAL-DEV.md)  
-**Security & Architecture Overview:** [docs/ARCHITECTURE_AND_SECURITY.md](./docs/ARCHITECTURE_AND_SECURITY.md)  
-**Security Brief (.docx):** [docs/Hensel_Phelps_Field_Operations_Architecture_and_Security.docx](./docs/Hensel_Phelps_Field_Operations_Architecture_and_Security.docx)  
-**Architecture & Security Diagrams (.drawio):** [docs/architecture-and-security.drawio](./docs/architecture-and-security.drawio)
+Target deployment: [hp-trimble-lab.com](https://hp-trimble-lab.com)
 
-- Localhost uses **no Trimble Identity** (`http://localhost:3000`).
-- TID is only for the VPN/VM (`hp-trimble-lab.com`).
-- Put UI edits on a branch and open a PR to `main`.
+---
 
-## Getting Started (localhost)
+## Overview
 
+1. **Frictionless Trade Daily Intake (`/intake/[projectId]`)**:
+   - Mobile-first, zero-friction trade contractor daily entry initiated via jobsite QR code.
+   - Multimodal capture: freeform voice recording (speech-to-text via Whisper / Gemini), structured FOG617 audio interview questions, photo uploads with automated trade and labor extraction.
+   - Trade partner selection with autocomplete, craft worker counts, and hours breakdown.
+
+2. **Hensel Phelps Staff Mobile Daily (`/intake/[projectId]/hp`)**:
+   - Streamlined intake path specifically tailored for Hensel Phelps staff, with auto-dispatch into review.
+
+3. **Master Bowling Sheet (`/projects/[projectId]/bowling`)**:
+   - Matrix of tracked trade contractors across calendar days, indicating intake status, missing dailies, and missing STA flags.
+
+4. **Superdaily Review & Master Export (`/projects/[projectId]/superdaily`)**:
+   - Consolidated superintendent view synthesizing daily subcontractor reports into a high-level site narrative.
+   - Inline review, weather data integration, and branded export conforming to official Hensel Phelps brand standards (Pantone 187 Red `#A6192E`, Wheatland Yellow `#F2A900`, Charcoal Gray `#333333`, and Roboto typography).
+
+5. **Digitization & Inspection Processing**:
+   - Multi-image checklist OCR and punch list photo scanning.
+   - Direct synchronization to Trimble ProjectSight APIs as the official System of Record.
+
+---
+
+## Architecture & Security Documentation
+
+Detailed enterprise specs and architecture docs live in `docs/`:
+
+- [ARCHITECTURE_AND_SECURITY.md](./docs/ARCHITECTURE_AND_SECURITY.md) — Architectural overview, data privacy, TAAI integration, and tenant isolation brief.
+- [Hensel Phelps Security Brief (.docx)](./docs/Hensel_Phelps_Field_Operations_Architecture_and_Security.docx)
+- [Architecture & Security Diagrams (.drawio)](./docs/architecture-and-security.drawio)
+- [LOCAL-DEV.md](./LOCAL-DEV.md) — Local developer guide for running without Trimble Identity.
+
+---
+
+## Local Development
+
+### 1. Prerequisites
+- Node.js 20+
+- npm
+
+### 2. Environment Setup
 ```bash
 cp .env.local.example .env.local
 npm install
-npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You are signed in as Local Developer automatically.
+`AUTH_MODE=local` is set by default in `.env.local`, allowing you to run and test locally without requiring Trimble Identity (TID) credentials or VPN access.
 
-## Features
-
-- 🎨 Modern UI with dark/light theme support using shadcn/ui
-- 🎥 Real-time audio/video streaming with Google's Multimodal Live API
-- 🖥️ Screen sharing and webcam integration
-- 🗺️ Interactive map view with Google Maps integration
-- 📊 Advanced data visualization with Recharts
-- 🔍 Powerful search and filtering capabilities
-- 📱 Design with Tailwind CSS
-- 🤖 AI-powered assistance with Gemini Flash integration and optimized Assistant Panel
-- 📸 Robust screen capture with annotation tools
-- 🌐 3D visualization with Three.js
-
-## Tech Stack
-
-- **Framework**: Next.js 14 with App Router
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS, CSS Modules
-- **Media Streaming**:
-  - Google Multimodal Live API
-  - WebRTC for media capture
-  - Canvas API for frame processing
-- **UI Components**:
-  - Radix UI primitives
-  - shadcn/ui component system
-  - Custom components
-  - Lucide React / Connect icons
-- **State Management**:
-  - Zustand for global state
-  - React Hook Form for forms
-- **Data & Backend**:
-  - Supabase for database
-  - AI integration (Gemini)
-- **Visualization**:
-  - Three.js for 3D
-  - Recharts for charts
-  - Google Maps API
-- **File Handling**:
-  - PDF viewing (react-pdf)
-
-## Getting Started
-
-1. Clone the repository:
-
-```bash
-git clone [repository-url]
-```
-
-2. Install dependencies:
-
-```bash
-npm install
-# or
-yarn install
-# or
-pnpm install
-# or
-bun install
-```
-
-3. Set up environment variables:
-   Create a `.env.local` file with:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_key
-NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-
-# Reach out to Julian Oczkowski if you need help
-
-
-```
-
-4. Run the development server:
-
+### 3. Run Dev Server
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Project Structure
+### 4. Run Test Suite
+```bash
+npm test
+```
 
-- `app/` - Next.js app router pages and layouts
-- `components/` - Reusable UI components
-  - `ui/` - Base UI components
-  - Feature-specific component directories
-- `hooks/` - Custom React hooks
-- `lib/` - Utility functions and shared logic
-- `config/` - Configuration files
-- `types/` - TypeScript type definitions
-- `public/` - Static assets
+### 5. Production Build
+```bash
+npm run build
+```
 
-## Development
+---
 
-### Code Quality
+## Key Routes
 
-- TypeScript for type safety
-- ESLint for code linting
-- Husky for git hooks
-- Proper error boundaries
-
-### Performance
-
-- Optimized builds with webpack
-- Code splitting
-- Image optimization
-- Font optimization
-
-## Learn More
-
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Supabase Documentation](https://supabase.io/docs)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [Radix UI Documentation](https://www.radix-ui.com/docs/primitives)
-
-## Deployment
-
-The application is designed to be deployed on Vercel. Check out the [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+| Route | Purpose |
+| :--- | :--- |
+| `/projects` | Project overview register & jobsite QR code generator |
+| `/projects/[projectId]/bowling` | Subcontractor Bowling Sheet matrix |
+| `/projects/[projectId]/dashboard` | Monthly activity & analytics grid |
+| `/projects/[projectId]/superdaily` | Executive Superdaily synthesis & print export |
+| `/projects/[projectId]/companies` | Tracked trade partner management |
+| `/projects/[projectId]/inspections` | Inspection register & multi-page checklist OCR |
+| `/projects/[projectId]/punch-list` | Punch list digitization & camera scan |
+| `/intake/[projectId]` | Public mobile QR trade daily intake |
+| `/intake/[projectId]/hp` | Hensel Phelps staff mobile daily intake |

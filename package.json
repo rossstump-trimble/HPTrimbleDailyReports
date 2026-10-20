@@ -1,6 +1,7 @@
 {
-  "name": "project-sight",
+  "name": "hp-trimble-daily-reports",
   "version": "0.1.0",
+  "description": "Hensel Phelps & Trimble Field Operations Prototype for mobile trade daily intake, punch list & inspection digitization, and Superdaily review.",
   "private": true,
   "scripts": {
     "dev": "next dev",
