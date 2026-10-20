@@ -89,6 +89,26 @@ describe('parseGeminiDailyJson', () => {
     expect(result.date).toBeUndefined();
     expect(result.workerCount).toBeUndefined();
   });
+
+  it('maps ocrPages strings onto 1-based sourcePages and leaves notes alone', () => {
+    const result = parseGeminiDailyJson(
+      JSON.stringify({
+        tradePartnerName: 'ALC',
+        notes: 'No delays.',
+        ocrPages: ['Page one company ALC', 'Page two 6 electricians'],
+      }),
+    );
+    expect(result.notes).toBe('No delays.');
+    expect(result.sourcePages).toEqual([
+      { page: 1, text: 'Page one company ALC' },
+      { page: 2, text: 'Page two 6 electricians' },
+    ]);
+  });
+
+  it('treats a single ocrText string as page 1', () => {
+    const result = parseGeminiDailyJson(JSON.stringify({ ocrText: 'ALC six guys 48 hours' }));
+    expect(result.sourcePages).toEqual([{ page: 1, text: 'ALC six guys 48 hours' }]);
+  });
 });
 
 // ─── extractDailyFromBuffer — xlsx ──────────────────────────────────────────
@@ -152,6 +172,11 @@ describe('extractDailyFromBuffer – xlsx', () => {
   it('extracts notes', async () => {
     const result = await extractDailyFromBuffer(makeSampleXlsx(), 'application/xlsx', 'report.xlsx');
     expect(result.notes).toContain('Crane inspection');
+  });
+
+  it('keeps a text dump of the sheet for source review', async () => {
+    const result = await extractDailyFromBuffer(makeSampleXlsx(), 'application/xlsx', 'daily.xlsx');
+    expect(result.sourcePages?.[0]?.text).toMatch(/Apex Steel/);
   });
 
   it('returns empty object for corrupt/non-xlsx buffer', async () => {

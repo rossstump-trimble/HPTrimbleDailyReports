@@ -2,7 +2,7 @@ import type { DailyReport } from '@/types/hpproto';
 import type { ProjectSightDestination } from '@/lib/projectsight/destination';
 import { ProjectSightHttpError } from '@/lib/projectsight/client';
 import { markDailySentToProjectSight } from '@/lib/store';
-import { sendFog617ToProjectSight, type SendDailyResult } from '@/lib/projectsight/send-daily';
+import { sendFog617ToProjectSight, type SendDailyResult, type SendDailyAttachment } from '@/lib/projectsight/send-daily';
 import type { Fog617Capture } from '@/lib/projectsight/map-daily';
 
 export function captureFromDailyReport(report: DailyReport): Fog617Capture {

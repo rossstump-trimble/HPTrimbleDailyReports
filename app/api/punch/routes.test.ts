@@ -1,10 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GET as getItems } from './[projectId]/items/route';
 import { POST as commitItems } from './[projectId]/commit/route';
+import { getDefaultDbPath } from '@/lib/store';
 import fs from 'fs';
 import path from 'path';
 
+function cleanupTestDb() {
+  const dbPath = getDefaultDbPath();
+  if (dbPath.includes('test') && fs.existsSync(dbPath)) {
+    fs.rmSync(dbPath, { force: true });
+  }
+}
+
 describe('Punch List API Endpoints', () => {
+  beforeEach(() => {
+    cleanupTestDb();
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
   it('returns items from local store when ProjectSight is not connected', async () => {
     const req = new Request('http://localhost:3000/api/punch/1025/items');
     const res = await getItems(req, { params: { projectId: '1025' } });

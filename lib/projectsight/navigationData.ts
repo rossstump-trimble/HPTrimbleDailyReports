@@ -75,7 +75,7 @@ export function getNavigationItemsForProject(projectId: string = "1025"): MenuIt
     },
     {
       id: "inspections",
-      name: "Inspections",
+      name: "Checklist",
       icon: ClipboardCheck,
       path: `/projects/${projectId}/inspections`,
       order: 24,

@@ -9,15 +9,16 @@ export async function PATCH(
   { params }: { params: { projectId: string; companyId: string } },
 ) {
   try {
-    const { projectId, companyId } = params;
+    const { projectId, companyId: rawCompanyId } = params;
     const project = getProjectById(projectId);
     if (!project) {
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { isTracked?: boolean };
+    const body = (await req.json().catch(() => ({}))) as { isTracked?: boolean; companyId?: string };
     const isTracked = Boolean(body.isTracked);
-    const updated = toggleCompanyTracking(projectId, companyId, isTracked);
+    const targetCompanyId = body.companyId || decodeURIComponent(rawCompanyId || '');
+    const updated = toggleCompanyTracking(projectId, targetCompanyId, isTracked);
 
     return NextResponse.json({
       success: true,

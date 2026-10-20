@@ -46,8 +46,8 @@ export async function sanitizeImageForSecureSite(file: File): Promise<File> {
   }
 
   return new Promise((resolve, reject) => {
-    // If running in node/test environment without window/Image
-    if (typeof window === "undefined" || typeof Image === "undefined") {
+    // If running in node/test environment without window/Image/URL.createObjectURL
+    if (typeof window === "undefined" || typeof Image === "undefined" || typeof URL?.createObjectURL !== "function") {
       const sanitized = new File([file], `sanitized_${file.name}`, {
         type: file.type || "image/jpeg",
         lastModified: Date.now(),

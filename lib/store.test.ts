@@ -369,6 +369,44 @@ describe('HPproto Local Store', () => {
     const afterToggle = getProjectById('1025', TEST_DB_PATH);
     expect(afterToggle?.tradePartners).toHaveLength(2);
 
+    // Toggle tracking off with exact name or slug
+    toggleCompanyTracking('1025', 'Apex Drywall', false, TEST_DB_PATH);
+    const afterToggleOff = getProjectById('1025', TEST_DB_PATH);
+    expect(afterToggleOff?.tradePartners).toHaveLength(1);
+    expect(afterToggleOff?.excludedTradePartnerIds).toContain('apex-drywall');
+
+    // Toggle tracking with company containing comma and spaces like GPRS, Inc
+    toggleCompanyTracking('1025', 'GPRS, Inc', true, TEST_DB_PATH);
+    const afterGprsOn = getProjectCompanies('1025', TEST_DB_PATH);
+    const gprs = afterGprsOn.find(c => c.name.toLowerCase().includes('gprs'));
+    expect(gprs?.isTracked).toBe(true);
+
+    toggleCompanyTracking('1025', encodeURIComponent('gprs-inc'), false, TEST_DB_PATH);
+    const afterGprsOff = getProjectCompanies('1025', TEST_DB_PATH);
+    const gprsOff = afterGprsOff.find(c => c.name.toLowerCase().includes('gprs'));
+    expect(gprsOff?.isTracked).toBe(false);
+
+    // Toggle off Performance Contracting Inc. (with period), Do Not Use 10, General Contractor
+    toggleCompanyTracking('1025', 'Performance Contracting Inc.', false, TEST_DB_PATH);
+    toggleCompanyTracking('1025', 'Do Not Use 10', false, TEST_DB_PATH);
+    toggleCompanyTracking('1025', 'Western Partitions Inc. - Luke Justice', false, TEST_DB_PATH);
+    toggleCompanyTracking('1025', 'General Contractor', false, TEST_DB_PATH);
+
+    const companiesAfterExclusions = getProjectCompanies('1025', TEST_DB_PATH);
+    const perf = companiesAfterExclusions.find(c => c.name.toLowerCase().includes('performance contracting'));
+    const dnu = companiesAfterExclusions.find(c => c.name.toLowerCase().includes('do not use 10'));
+    const wpi = companiesAfterExclusions.find(c => c.name.toLowerCase().includes('western partitions'));
+    const gc = companiesAfterExclusions.find(c => c.name.toLowerCase().includes('general contractor'));
+
+    expect(perf?.isTracked).toBe(false);
+    expect(dnu?.isTracked).toBe(false);
+    expect(wpi?.isTracked).toBe(false);
+    expect(gc?.isTracked).toBe(false);
+
+    const projExclusions = getProjectById('1025', TEST_DB_PATH);
+    expect(projExclusions?.excludedTradePartnerIds).toContain('general-contractor');
+    expect(projExclusions?.excludedTradePartnerIds).toContain('performance-contracting-inc');
+
     // Add contact
     const newContact: CompanyContact = {
       id: 'c-2',

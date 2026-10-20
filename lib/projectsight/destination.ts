@@ -1,5 +1,12 @@
 export const DESTINATION_COOKIE = 'ps_destination';
 
+export const DEFAULT_DESTINATION: ProjectSightDestination = {
+  portfolioId: '8fddbe9f-933a-43b9-8b5e-17ff16f14598',
+  projectId: '1025',
+  portfolioName: 'Hensel Phelps',
+  projectName: 'Hensel Phelps Demo Project',
+};
+
 export interface ProjectSightDestination {
   portfolioId: string;
   projectId: string;
@@ -23,18 +30,34 @@ export function parseDestinationJson(raw: string | undefined | null): ProjectSig
   }
 }
 
+export function destinationFromCookieValue(raw: string | undefined | null): ProjectSightDestination | null {
+  if (!raw) return null;
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+  return parseDestinationJson(decoded);
+}
+
+export function destinationFromCookieWithFallback(raw: string | undefined | null): ProjectSightDestination {
+  return destinationFromCookieValue(raw) ?? DEFAULT_DESTINATION;
+}
+
 export function destinationFromSearchParams(
   params: URLSearchParams,
   cookie: ProjectSightDestination | null,
 ): ProjectSightDestination | null {
-  const portfolioId = params.get('psPortfolio') || cookie?.portfolioId || '';
-  const projectId = params.get('psProject') || cookie?.projectId || '';
+  const fallback = cookie ?? DEFAULT_DESTINATION;
+  const portfolioId = params.get('psPortfolio') || fallback.portfolioId;
+  const projectId = params.get('psProject') || fallback.projectId;
   if (!portfolioId || !projectId) return null;
   return {
     portfolioId,
     projectId,
-    portfolioName: cookie?.portfolioName || '',
-    projectName: cookie?.projectName || '',
+    portfolioName: fallback.portfolioName || '',
+    projectName: fallback.projectName || '',
   };
 }
 

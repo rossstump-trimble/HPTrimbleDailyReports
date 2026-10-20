@@ -1,7 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { POST } from './summarize/route';
+import { getDefaultDbPath } from '@/lib/store';
+import fs from 'fs';
+
+function cleanupTestDb() {
+  const dbPath = getDefaultDbPath();
+  if (dbPath.includes('test') && fs.existsSync(dbPath)) {
+    fs.rmSync(dbPath, { force: true });
+  }
+}
 
 describe('Superdaily Summarize API Route', () => {
+  beforeEach(() => {
+    cleanupTestDb();
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
+  });
   it('rejects invalid date formats', async () => {
     const req = new Request('http://localhost:3000/api/projects/1025/superdaily/summarize', {
       method: 'POST',

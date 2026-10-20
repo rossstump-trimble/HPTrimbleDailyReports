@@ -17,7 +17,7 @@ import {
   destinationFromCookieWithFallback,
 } from '@/lib/projectsight/destination';
 import { SESSION_COOKIE } from '@/lib/local-session';
-import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
+import { tidAccessTokenFromCookie, getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import type { InspectionChecklistItem, InspectionRecord } from '@/types/inspections';
 import type { DailyReport } from '@/types/hpproto';
 
@@ -53,12 +53,44 @@ export async function POST(
 
     try {
       const jar = cookies();
-      token = tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
+      const rawSession = jar.get(SESSION_COOKIE)?.value;
+      token = tidAccessTokenFromCookie(rawSession);
+      if (!token) {
+        const tidRes = await getValidTidAccessToken(rawSession);
+        token = tidRes.token;
+      }
       const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
       psPortfolioId = dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
       psProjectId = dest.projectId || DEFAULT_DESTINATION.projectId;
     } catch {
       // Running outside Next.js server context
+    }
+
+    try {
+      const store = getStore();
+      const projRecord = store.projects.find((p) => p.id === projectId || p.psProjectId === projectId);
+      if (projRecord?.psPortfolioId) psPortfolioId = projRecord.psPortfolioId;
+      if (projRecord?.psProjectId) psProjectId = projRecord.psProjectId;
+    } catch {
+      // ignore
+    }
+
+    try {
+      const urlObj = new URL(req.url);
+      const qPortfolio = urlObj.searchParams.get('psPortfolio');
+      const qProject = urlObj.searchParams.get('psProject');
+      if (qPortfolio) psPortfolioId = qPortfolio;
+      if (qProject) psProjectId = qProject;
+      else if (projectId && projectId !== '1025' && projectId !== 'demo' && !isNaN(Number(projectId))) {
+        psProjectId = projectId;
+      }
+    } catch {
+      // ignore url parse issues in synthetic test environments
+    }
+
+    const authHeader = req.headers.get('authorization');
+    if (!token && authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      token = authHeader.slice(7).trim();
     }
 
     let psSynced = false;

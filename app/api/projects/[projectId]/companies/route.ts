@@ -7,6 +7,7 @@ import {
   getProjects,
   getProjectCompanies,
   setProjectCompanies,
+  toggleCompanyTracking,
 } from '@/lib/store';
 import { listCompaniesWithContacts } from '@/lib/projectsight/client';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
@@ -55,7 +56,7 @@ export async function POST(
     }
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: 'sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete';
+      action?: 'sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete' | 'toggle-tracking';
       sourceProjectId?: string;
       sourcePortfolioId?: string;
       name?: string;
@@ -64,9 +65,25 @@ export async function POST(
       companyId?: string;
       id?: string;
       purgeReports?: boolean;
+      isTracked?: boolean;
     };
 
     const action = body.action || 'sync-connected';
+
+    // Action: Toggle tracking
+    if (action === 'toggle-tracking') {
+      const companyId = (body.companyId || body.id || body.name || '').trim();
+      if (!companyId) {
+        return NextResponse.json({ success: false, error: 'companyId is required to toggle tracking' }, { status: 400 });
+      }
+      const isTracked = Boolean(body.isTracked);
+      const updated = toggleCompanyTracking(projectId, companyId, isTracked);
+      return NextResponse.json({
+        success: true,
+        companies: updated,
+        trackedCount: updated.filter((c) => c.isTracked).length,
+      });
+    }
 
     // Action: Delete a single company
     if (action === 'delete') {
@@ -255,12 +272,18 @@ export async function POST(
           });
         } else {
           addedCount++;
+          const excludedSet = new Set((project.excludedTradePartnerIds || []).map((x) => x.toLowerCase()));
+          const isExcluded =
+            excludedSet.has(compId.toLowerCase()) ||
+            excludedSet.has(compName.toLowerCase()) ||
+            excludedSet.has(slugTradePartnerId(compName));
+
           updatedList.push({
             id: compId,
             psCompanyId: psCompId,
             name: compName,
             trade: cat || 'Trade Partner',
-            isTracked: true,
+            isTracked: !isExcluded,
             contacts,
           });
         }

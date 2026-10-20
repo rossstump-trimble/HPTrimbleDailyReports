@@ -30,6 +30,8 @@ function emptyForm(): DailyFormData {
     workerCount: 0,
     totalHours: 0,
     crewBreakdown: [],
+    tierSubcontractors: [],
+    tierSubsSummary: "",
     equipment: [],
     notes: "",
     staCompleted: false,
@@ -52,6 +54,7 @@ export default function OperatorDailyPage() {
   const [extractionFailed, setExtractionFailed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<DailyFormData>(emptyForm());
+  const [files, setFiles] = useState<File[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [destination, setDestination] = useState<ProjectSightDestination | null>(null);
   const [tidReady, setTidReady] = useState(false);
@@ -72,13 +75,18 @@ export default function OperatorDailyPage() {
       .catch(() => setTidReady(false));
   }, []);
 
-  const handleFileSelected = useCallback(async (uploaded: File) => {
-    setFile(uploaded);
+  const handleFilesSelected = useCallback(async (uploadedFiles: File[]) => {
+    if (uploadedFiles.length === 0) return;
+    setFiles(uploadedFiles);
+    setFile(uploadedFiles[0]);
     setIsExtracting(true);
     setExtractionFailed(false);
     try {
       const body = new FormData();
-      body.append("file", uploaded);
+      for (const f of uploadedFiles) {
+        body.append("files", f);
+      }
+      body.append("file", uploadedFiles[0]);
       const res = await fetch("/api/intake/extract", { method: "POST", body });
       if (!res.ok) throw new Error("extract failed");
       const extracted = unwrapExtractResponse(await res.json());
@@ -97,8 +105,12 @@ export default function OperatorDailyPage() {
     }
   }, []);
 
+  const handleFileSelected = useCallback(async (uploaded: File) => {
+    await handleFilesSelected([uploaded]);
+  }, [handleFilesSelected]);
+
   const handleSend = useCallback(async () => {
-    if (!file || !destination?.portfolioId || !destination.projectId) return;
+    if ((!file && files.length === 0) || !destination?.portfolioId || !destination.projectId) return;
     setIsSubmitting(true);
     setSendError("");
     try {
@@ -106,7 +118,10 @@ export default function OperatorDailyPage() {
       body.append("portfolioId", destination.portfolioId);
       body.append("projectId", destination.projectId);
       body.append("daily", JSON.stringify(formData));
-      body.append("file", file);
+      if (files.length > 0) {
+        for (const f of files) body.append("files", f);
+      }
+      if (file) body.append("file", file);
       const res = await fetch("/api/projectsight/dailyreports", { method: "POST", body });
       const json = await res.json();
       if (!res.ok) {
@@ -119,7 +134,7 @@ export default function OperatorDailyPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [destination, file, formData]);
+  }, [destination, file, files, formData]);
 
   const retryAttach = useCallback(async () => {
     if (!file || !destination || !sendResult?.projectSightDailyId) return;
@@ -196,7 +211,11 @@ export default function OperatorDailyPage() {
       )}
 
       {step === "upload" && (
-        <FileUploadDropzone onFileSelected={handleFileSelected} isLoading={isExtracting} />
+        <FileUploadDropzone
+          onFilesSelected={handleFilesSelected}
+          onFileSelected={handleFileSelected}
+          isLoading={isExtracting}
+        />
       )}
 
       {step === "confirm" && (
@@ -209,7 +228,7 @@ export default function OperatorDailyPage() {
               </p>
             </div>
           )}
-          {!file && (
+          {!file && files.length === 0 && (
             <p className="text-sm text-destructive">A FOG 617 file is required to send.</p>
           )}
           {sendError && <p className="text-sm text-destructive">{sendError}</p>}
@@ -221,6 +240,7 @@ export default function OperatorDailyPage() {
             onCancel={() => {
               setStep("upload");
               setFile(null);
+              setFiles([]);
               setFormData(emptyForm());
             }}
             onSubmit={handleSend}
@@ -228,6 +248,8 @@ export default function OperatorDailyPage() {
             submitLabel={canSend ? "Send to ProjectSight" : "Select project to send"}
             requireTradePartner={false}
             submitDisabled={!canSend}
+            attachedFiles={files}
+            onAttachedFilesChange={setFiles}
           />
         </div>
       )}

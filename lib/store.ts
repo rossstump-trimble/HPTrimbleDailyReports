@@ -18,11 +18,31 @@ import type { PunchItem, PunchCommitActionItem, PunchCommitResult } from '@/type
 export type { StoreData };
 export { MAX_DAILY_REPORTS };
 
-const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'hpproto-db.json');
+export function getDefaultDbPath(): string {
+  if (process.env.HPPROTO_DB_PATH) {
+    return process.env.HPPROTO_DB_PATH;
+  }
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    return path.join(process.cwd(), 'data', 'hpproto-test-db.json');
+  }
+  return path.join(process.cwd(), 'data', 'hpproto-db.json');
+}
+
+export const DEFAULT_DB_PATH = path.join(process.cwd(), 'data', 'hpproto-db.json');
 
 export const DEMO_PROJECT_TRADE_PARTNERS: TradePartner[] = [];
 
 export const SEEDED_PROJECTS: Project[] = [
+  {
+    id: '8',
+    code: 'RTP',
+    name: 'Ross Tests Permissions',
+    createdAt: '2026-08-19T00:00:00.000Z',
+    workingDays: [1, 2, 3, 4, 5],
+    psPortfolioId: 'b68d7ced-68be-45a3-b1ae-99b0250db779',
+    psProjectId: '8',
+    tradePartners: [],
+  },
   {
     id: '1025',
     code: 'HP-DEMO',
@@ -42,7 +62,7 @@ export class CapacityLimitError extends Error {
   }
 }
 
-export function getCapacityStatus(filePath: string = DEFAULT_DB_PATH): { total: number; max: number; isLocked: boolean } {
+export function getCapacityStatus(filePath: string = getDefaultDbPath()): { total: number; max: number; isLocked: boolean } {
   const count = getStore(filePath).dailyReports.length;
   return {
     total: count,
@@ -55,7 +75,7 @@ export function getInitialProjects(): Project[] {
   return JSON.parse(JSON.stringify(SEEDED_PROJECTS));
 }
 
-export function getStore(filePath: string = DEFAULT_DB_PATH): StoreData {
+export function getStore(filePath: string = getDefaultDbPath()): StoreData {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -100,7 +120,7 @@ export function getStore(filePath: string = DEFAULT_DB_PATH): StoreData {
   }
 }
 
-export function saveStore(data: StoreData, filePath: string = DEFAULT_DB_PATH): void {
+export function saveStore(data: StoreData, filePath: string = getDefaultDbPath()): void {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -110,11 +130,11 @@ export function saveStore(data: StoreData, filePath: string = DEFAULT_DB_PATH): 
   fs.renameSync(tempPath, filePath);
 }
 
-export function getProjects(filePath: string = DEFAULT_DB_PATH): Project[] {
+export function getProjects(filePath: string = getDefaultDbPath()): Project[] {
   return getStore(filePath).projects;
 }
 
-export function getProjectById(projectId: string, filePath: string = DEFAULT_DB_PATH): Project | undefined {
+export function getProjectById(projectId: string, filePath: string = getDefaultDbPath()): Project | undefined {
   return getProjects(filePath).find(p => p.id.toLowerCase() === projectId.toLowerCase());
 }
 
@@ -127,7 +147,7 @@ export function createProject(
     psPortfolioId?: string;
     psProjectId?: string;
   },
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): Project {
   const store = getStore(filePath);
   const id = projectData.name
@@ -161,7 +181,7 @@ export function createProject(
   return newProject;
 }
 
-export function deleteProject(projectId: string, filePath: string = DEFAULT_DB_PATH): boolean {
+export function deleteProject(projectId: string, filePath: string = getDefaultDbPath()): boolean {
   const store = getStore(filePath);
   const initialCount = store.projects.length;
   const filtered = store.projects.filter(p => p.id.toLowerCase() !== projectId.toLowerCase());
@@ -180,7 +200,7 @@ export function deleteProject(projectId: string, filePath: string = DEFAULT_DB_P
 export function updateProjectWorkingDays(
   projectId: string,
   workingDays: number[],
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): Project | undefined {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
@@ -193,16 +213,15 @@ export function updateProjectWorkingDays(
 export function updateProjectTradePartners(
   projectId: string,
   tradePartners: TradePartner[],
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): Project | undefined {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
   if (!proj) return undefined;
-  proj.tradePartners = tradePartners;
-  if (proj.excludedTradePartnerIds && tradePartners.length > 0) {
-    const included = new Set(tradePartners.flatMap(tp => [tp.id.toLowerCase(), tp.name.toLowerCase()]));
-    proj.excludedTradePartnerIds = proj.excludedTradePartnerIds.filter(id => !included.has(id.toLowerCase()));
-  }
+  const excludedSet = new Set((proj.excludedTradePartnerIds || []).map(id => id.toLowerCase()));
+  proj.tradePartners = tradePartners.filter(
+    tp => !excludedSet.has(tp.id.toLowerCase()) && !excludedSet.has(tp.name.toLowerCase()) && !excludedSet.has(slugTradePartnerId(tp.name)),
+  );
   saveStore(store, filePath);
   return proj;
 }
@@ -215,20 +234,49 @@ function syncTradePartnersFromCompanies(proj: Project): void {
 
 export function getProjectCompanies(
   projectId: string,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): ProjectCompany[] {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
   if (!proj) return [];
 
-  if (proj.availableCompanies === undefined) {
-    proj.availableCompanies = (proj.tradePartners || []).map(tp => ({
-      id: tp.id,
-      name: tp.name,
-      trade: tp.category,
-      isTracked: true,
-      contacts: [],
-    }));
+  if (!proj.availableCompanies) {
+    proj.availableCompanies = [];
+  }
+
+  const excludedSet = new Set((proj.excludedTradePartnerIds || []).map(x => x.toLowerCase()));
+
+  // Ensure any partner currently in tradePartners is in availableCompanies
+  let changed = false;
+  for (const tp of proj.tradePartners || []) {
+    const exists = proj.availableCompanies.some(
+      c => c.id.toLowerCase() === tp.id.toLowerCase() || c.name.toLowerCase() === tp.name.toLowerCase(),
+    );
+    if (!exists) {
+      proj.availableCompanies.push({
+        id: tp.id,
+        name: tp.name,
+        trade: tp.category || 'Trade Partner',
+        isTracked: !excludedSet.has(tp.id.toLowerCase()) && !excludedSet.has(tp.name.toLowerCase()) && !excludedSet.has(slugTradePartnerId(tp.name)),
+        contacts: [],
+      });
+      changed = true;
+    }
+  }
+
+  // Also make sure isTracked aligns with excludedTradePartnerIds
+  for (const c of proj.availableCompanies) {
+    const isExcluded =
+      excludedSet.has(c.id.toLowerCase()) ||
+      excludedSet.has(c.name.toLowerCase()) ||
+      excludedSet.has(slugTradePartnerId(c.name));
+    if (isExcluded && c.isTracked) {
+      c.isTracked = false;
+      changed = true;
+    }
+  }
+
+  if (changed) {
     saveStore(store, filePath);
   }
 
@@ -238,13 +286,32 @@ export function getProjectCompanies(
 export function setProjectCompanies(
   projectId: string,
   companies: ProjectCompany[],
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): void {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
   if (!proj) return;
 
   proj.availableCompanies = companies;
+  if (!proj.excludedTradePartnerIds) {
+    proj.excludedTradePartnerIds = [];
+  }
+
+  for (const c of companies) {
+    const cId = c.id.toLowerCase();
+    const cName = c.name.toLowerCase();
+    const cSlug = slugTradePartnerId(c.name);
+    if (!c.isTracked) {
+      if (!proj.excludedTradePartnerIds.some(x => x.toLowerCase() === cId)) proj.excludedTradePartnerIds.push(cId);
+      if (!proj.excludedTradePartnerIds.some(x => x.toLowerCase() === cName)) proj.excludedTradePartnerIds.push(cName);
+      if (cSlug && !proj.excludedTradePartnerIds.some(x => x.toLowerCase() === cSlug)) proj.excludedTradePartnerIds.push(cSlug);
+    } else {
+      proj.excludedTradePartnerIds = proj.excludedTradePartnerIds.filter(
+        id => id.toLowerCase() !== cId && id.toLowerCase() !== cName && id.toLowerCase() !== cSlug,
+      );
+    }
+  }
+
   syncTradePartnersFromCompanies(proj);
   saveStore(store, filePath);
 }
@@ -253,26 +320,138 @@ export function toggleCompanyTracking(
   projectId: string,
   companyId: string,
   isTracked: boolean,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): ProjectCompany[] {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
   if (!proj) return [];
 
-  if (proj.availableCompanies === undefined) {
-    proj.availableCompanies = (proj.tradePartners || []).map(tp => ({
-      id: tp.id,
-      name: tp.name,
-      trade: tp.category,
-      isTracked: true,
-      contacts: [],
-    }));
+  if (!proj.availableCompanies) {
+    proj.availableCompanies = [];
   }
 
-  const company = proj.availableCompanies.find(c => c.id.toLowerCase() === companyId.toLowerCase());
-  if (company) {
-    company.isTracked = isTracked;
+  const rawId = (companyId || '').trim();
+  const decodedId = decodeURIComponent(rawId).trim().toLowerCase();
+  const slugId = slugTradePartnerId(decodedId);
+  const rawSlug = slugTradePartnerId(rawId);
+
+  // Match all matching entries in availableCompanies
+  let matchingCompanies = proj.availableCompanies.filter(c => {
+    const cId = c.id.toLowerCase();
+    const cName = c.name.toLowerCase();
+    const cSlug = slugTradePartnerId(c.name);
+    return (
+      cId === decodedId ||
+      cName === decodedId ||
+      (slugId && cSlug === slugId) ||
+      (slugId && cId === slugId) ||
+      cName === rawId.toLowerCase() ||
+      (rawSlug && cSlug === rawSlug) ||
+      (c.psCompanyId != null && String(c.psCompanyId) === decodedId)
+    );
+  });
+
+  if (matchingCompanies.length === 0) {
+    // Check if it exists in tradePartners
+    const tpMatch = (proj.tradePartners || []).find(tp => {
+      const tpId = tp.id.toLowerCase();
+      const tpName = tp.name.toLowerCase();
+      const tpSlug = slugTradePartnerId(tp.name);
+      return (
+        tpId === decodedId ||
+        tpName === decodedId ||
+        (slugId && tpSlug === slugId) ||
+        (slugId && tpId === slugId) ||
+        tpName === rawId.toLowerCase() ||
+        (rawSlug && tpSlug === rawSlug)
+      );
+    });
+    if (tpMatch) {
+      const created: ProjectCompany = {
+        id: tpMatch.id,
+        name: tpMatch.name,
+        trade: tpMatch.category || 'Trade Partner',
+        isTracked,
+        contacts: [],
+      };
+      proj.availableCompanies.push(created);
+      matchingCompanies.push(created);
+    } else {
+      const created: ProjectCompany = {
+        id: slugId || rawSlug || decodedId,
+        name: rawId,
+        trade: 'Trade Partner',
+        isTracked,
+        contacts: [],
+      };
+      proj.availableCompanies.push(created);
+      matchingCompanies.push(created);
+    }
   }
+
+  // Update isTracked on all matching companies
+  for (const comp of matchingCompanies) {
+    comp.isTracked = isTracked;
+  }
+
+  if (!proj.excludedTradePartnerIds) {
+    proj.excludedTradePartnerIds = [];
+  }
+
+  // Collect all identifier forms to add/remove from exclusions
+  const idsToProcess = new Set<string>();
+  if (decodedId) idsToProcess.add(decodedId);
+  if (rawId) idsToProcess.add(rawId.toLowerCase());
+  if (slugId) idsToProcess.add(slugId);
+  if (rawSlug) idsToProcess.add(rawSlug);
+
+  for (const comp of matchingCompanies) {
+    if (comp.id) idsToProcess.add(comp.id.toLowerCase());
+    if (comp.name) idsToProcess.add(comp.name.toLowerCase());
+    const s = slugTradePartnerId(comp.name);
+    if (s) idsToProcess.add(s);
+  }
+
+  if (!isTracked) {
+    // Add all representations to excludedTradePartnerIds so bowling matrix and daily sync ignore it
+    for (const id of Array.from(idsToProcess)) {
+      if (!proj.excludedTradePartnerIds.some(x => x.toLowerCase() === id)) {
+        proj.excludedTradePartnerIds.push(id);
+      }
+    }
+    // Remove from active tradePartners
+    proj.tradePartners = (proj.tradePartners || []).filter(
+      tp =>
+        !idsToProcess.has(tp.id.toLowerCase()) &&
+        !idsToProcess.has(tp.name.toLowerCase()) &&
+        !idsToProcess.has(slugTradePartnerId(tp.name)),
+    );
+  } else {
+    // Re-enable tracking: remove from excludedTradePartnerIds
+    proj.excludedTradePartnerIds = proj.excludedTradePartnerIds.filter(
+      x => !idsToProcess.has(x.toLowerCase()),
+    );
+    // Ensure active trade partner is included
+    if (!proj.tradePartners) {
+      proj.tradePartners = [];
+    }
+    for (const comp of matchingCompanies) {
+      const alreadyIn = proj.tradePartners.some(
+        tp =>
+          idsToProcess.has(tp.id.toLowerCase()) ||
+          idsToProcess.has(tp.name.toLowerCase()) ||
+          idsToProcess.has(slugTradePartnerId(tp.name)),
+      );
+      if (!alreadyIn) {
+        proj.tradePartners.push({
+          id: comp.id,
+          name: comp.name,
+          category: comp.trade,
+        });
+      }
+    }
+  }
+
   syncTradePartnersFromCompanies(proj);
   saveStore(store, filePath);
   return proj.availableCompanies;
@@ -282,7 +461,7 @@ export function addCompanyContact(
   projectId: string,
   companyId: string,
   contact: CompanyContact,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): CompanyContact {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
@@ -326,7 +505,7 @@ export function removeTradePartnerFromProject(
   projectId: string,
   companyIdOrName: string,
   purgeReports: boolean = true,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): { project?: Project; removedCount: number; purgedReportsCount: number } {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
@@ -370,6 +549,13 @@ export function removeTradePartnerFromProject(
     matchingPartnerIds.forEach(id => excludedSet.add(id));
     matchingPartnerNames.forEach(name => excludedSet.add(name));
     proj.excludedTradePartnerIds = Array.from(excludedSet);
+
+    if (proj.availableCompanies) {
+      const slugTarget = slugTradePartnerId(rawTarget);
+      proj.availableCompanies = proj.availableCompanies.filter(
+        c => c.id.toLowerCase() !== target && c.name.toLowerCase() !== target && c.id.toLowerCase() !== baseTarget && c.name.toLowerCase() !== baseTarget && slugTradePartnerId(c.name) !== slugTarget,
+      );
+    }
   }
 
   let purgedReportsCount = 0;
@@ -430,7 +616,7 @@ export function setTradeDayOverride(
   tradePartnerId: string,
   dateIso: string,
   status: 'onsite' | 'offsite' | 'clear',
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): Project | undefined {
   const store = getStore(filePath);
   const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
@@ -483,13 +669,15 @@ function isSameReportSubmitter(a: DailyReport, b: DailyReport): boolean {
   if (subA.key !== '__default' && subB.key !== '__default') {
     return subA.key === subB.key;
   }
-  if (subA.key !== subB.key) {
-    return false;
+  // When both are generic (e.g. 'Field Intake' / default), match as the same submitter
+  // so repeat submissions on the same date update rather than duplicating.
+  if (subA.key === '__default' && subB.key === '__default') {
+    return true;
   }
-  return a.id === b.id;
+  return false;
 }
 
-export function upsertDailyReport(report: DailyReport, filePath: string = DEFAULT_DB_PATH): DailyReport {
+export function upsertDailyReport(report: DailyReport, filePath: string = getDefaultDbPath()): DailyReport {
   const store = getStore(filePath);
   const isMatch = (r: DailyReport) => {
     if (r.id === report.id) return true;
@@ -523,17 +711,34 @@ export function upsertDailyReport(report: DailyReport, filePath: string = DEFAUL
 
 export function getDailyReportById(
   id: string,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): DailyReport | undefined {
   return getStore(filePath).dailyReports.find((report) => report.id === id);
 }
 
-export function deleteDailyReport(id: string, filePath: string = DEFAULT_DB_PATH): boolean {
+export function deleteDailyReport(id: string, filePath: string = getDefaultDbPath()): boolean {
   const store = getStore(filePath);
   const initialLen = store.dailyReports.length;
+  const targetReport = store.dailyReports.find((r) => r.id === id);
   store.dailyReports = store.dailyReports.filter((r) => r.id !== id);
   if (store.dailyReports.length !== initialLen) {
     saveStore(store, filePath);
+
+    // Also remove from ingested-dailies disaster recovery backup directory if it exists
+    if (targetReport?.projectId && targetReport?.date) {
+      try {
+        const safeProject = (targetReport.projectId || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const safeDate = (targetReport.date || 'no-date').replace(/[^0-9-]/g, '_');
+        const safeDailyId = (id || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const backupDir = path.join(process.cwd(), 'data', 'ingested-dailies', safeProject, safeDate, safeDailyId);
+        if (fs.existsSync(backupDir)) {
+          fs.rmSync(backupDir, { recursive: true, force: true });
+        }
+      } catch (err) {
+        console.warn('[deleteDailyReport] failed to clean up backup folder', err);
+      }
+    }
+
     return true;
   }
   return false;
@@ -564,6 +769,21 @@ export function ensureTradePartnerInProject(
       name: cleanName,
       category: 'Trade Partner',
     });
+    if (!project.availableCompanies) {
+      project.availableCompanies = [];
+    }
+    const inAvailable = project.availableCompanies.some(
+      c => c.id.toLowerCase() === tpId.toLowerCase() || c.name.toLowerCase() === cleanName.toLowerCase(),
+    );
+    if (!inAvailable) {
+      project.availableCompanies.push({
+        id: tpId,
+        name: cleanName,
+        trade: 'Trade Partner',
+        isTracked: true,
+        contacts: [],
+      });
+    }
     if (project.excludedTradePartnerIds) {
       const cleanLower = cleanName.toLowerCase();
       project.excludedTradePartnerIds = project.excludedTradePartnerIds.filter(
@@ -578,7 +798,7 @@ export function ensureTradePartnerInProject(
 export function approveDailyReport(
   id: string,
   approverEmail?: string,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): DailyReport | undefined {
   const store = getStore(filePath);
   const index = store.dailyReports.findIndex((report) => report.id === id);
@@ -606,7 +826,7 @@ export interface ProjectSightSendMeta {
 export function markDailySentToProjectSight(
   id: string,
   meta: ProjectSightSendMeta,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): DailyReport | undefined {
   const store = getStore(filePath);
   const index = store.dailyReports.findIndex((report) => report.id === id);
@@ -628,7 +848,7 @@ export function markDailySentToProjectSight(
 export function getBowlingMatrix(
   projectId: string,
   yearMonth: string,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
   workingDaysOverride?: number[],
   liveReports?: DailyReport[],
 ): BowlingMatrix {
@@ -648,14 +868,20 @@ export function getBowlingMatrix(
   );
   const projectDailies = [...localDailies, ...extraDailies];
 
-  const projectPartners = project.tradePartners ? [...project.tradePartners] : [];
   const excludedSet = new Set((project.excludedTradePartnerIds || []).map((x) => x.toLowerCase()));
+  const projectPartners = (project.tradePartners ? [...project.tradePartners] : []).filter(
+    (tp) => !excludedSet.has(tp.id.toLowerCase()) && !excludedSet.has(tp.name.toLowerCase()) && !excludedSet.has(slugTradePartnerId(tp.name)),
+  );
 
   // Dynamically include trade partners found in dailies if not already listed or excluded
   for (const d of projectDailies) {
     const tName = (d.tradePartnerName || '').trim();
     const tId = d.tradePartnerId?.trim() || slugTradePartnerId(tName);
-    if (excludedSet.has(tName.toLowerCase()) || excludedSet.has(tId.toLowerCase())) {
+    if (
+      excludedSet.has(tName.toLowerCase()) ||
+      excludedSet.has(tId.toLowerCase()) ||
+      excludedSet.has(slugTradePartnerId(tName))
+    ) {
       continue;
     }
     if (
@@ -810,7 +1036,7 @@ export function getBowlingMatrix(
   };
 }
 
-export function getPunchItems(projectId: string, filePath: string = DEFAULT_DB_PATH): PunchItem[] {
+export function getPunchItems(projectId: string, filePath: string = getDefaultDbPath()): PunchItem[] {
   const store = getStore(filePath);
   return (store.punchItems || []).filter(
     (p) => p.projectId.toLowerCase() === projectId.toLowerCase(),
@@ -820,7 +1046,7 @@ export function getPunchItems(projectId: string, filePath: string = DEFAULT_DB_P
 export function upsertPunchItem(
   projectId: string,
   item: PunchItem,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): PunchItem {
   const store = getStore(filePath);
   if (!store.punchItems) store.punchItems = [];
@@ -838,7 +1064,7 @@ export function upsertPunchItem(
 export function batchCommitPunchItems(
   projectId: string,
   actions: PunchCommitActionItem[],
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): PunchCommitResult {
   const store = getStore(filePath);
   if (!store.punchItems) store.punchItems = [];
@@ -901,7 +1127,7 @@ export function batchCommitPunchItems(
 
 export function getInspectionsForProject(
   projectId: string,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): InspectionRecord[] {
   const store = getStore(filePath);
   return (store.inspections || []).filter(
@@ -911,7 +1137,7 @@ export function getInspectionsForProject(
 
 export function getInspectionById(
   inspectionId: string,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): InspectionRecord | null {
   const store = getStore(filePath);
   return (store.inspections || []).find((ins) => ins.id === inspectionId) || null;
@@ -919,7 +1145,7 @@ export function getInspectionById(
 
 export function saveInspectionRecord(
   record: InspectionRecord,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): InspectionRecord {
   const store = getStore(filePath);
   if (!store.inspections) store.inspections = [];
@@ -933,10 +1159,22 @@ export function saveInspectionRecord(
   return record;
 }
 
+export function clearInspectionsForProject(
+  projectId: string,
+  filePath: string = getDefaultDbPath(),
+): void {
+  const store = getStore(filePath);
+  if (!store.inspections) return;
+  store.inspections = store.inspections.filter(
+    (ins) => ins.projectId.toLowerCase() !== projectId.toLowerCase(),
+  );
+  saveStore(store, filePath);
+}
+
 export function updateInspectionRecord(
   inspectionId: string,
   updates: Partial<InspectionRecord>,
-  filePath: string = DEFAULT_DB_PATH,
+  filePath: string = getDefaultDbPath(),
 ): InspectionRecord | null {
   const store = getStore(filePath);
   if (!store.inspections) return null;
@@ -951,3 +1189,4 @@ export function updateInspectionRecord(
   saveStore(store, filePath);
   return updated;
 }
+

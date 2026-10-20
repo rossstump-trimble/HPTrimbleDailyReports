@@ -59,9 +59,19 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
   const q = question.trim();
   if (!q) return helpResult();
 
+  const trades = data.rows.map((r) => r.trade);
+
+  if (trades.length === 0) {
+    return {
+      answer: "No trade partner companies are on this dashboard yet. Add trade partners or load them from ProjectSight on the Bowling sheet to track daily reports.",
+      bullets: [],
+      suggestedFollowUps: [],
+    };
+  }
+
   const lower = q.toLowerCase();
-  const named = findTradesInText(lower);
-  const namedExact = findTradeByName(lower.replace(/[?!.]/g, " "));
+  const named = findTradesInText(lower, trades);
+  const namedExact = findTradeByName(lower.replace(/[?!.]/g, " "), trades);
 
   const rowFor = (id: string) => data.rows.find((r) => r.trade.id === id);
 
@@ -181,7 +191,7 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
       return {
         answer: `I don't have ${focus.name} on this dashboard.`,
         bullets: [],
-        suggestedFollowUps: TRADE_ROSTER.slice(0, 3).map((t) => `Is ${t.name} on site today?`),
+        suggestedFollowUps: trades.slice(0, 3).map((t) => `Is ${t.name} on site today?`),
       };
     }
 
@@ -242,10 +252,10 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
 
   return {
     answer: `I couldn't map that to dashboard data. Try a trade name or a question about missing dailies, HP backlog, hours, or ${monthTitle(data.month)} compliance.`,
-    bullets: TRADE_ROSTER.slice(0, 5).map((t) => t.name),
+    bullets: trades.slice(0, 5).map((t) => t.name),
     suggestedFollowUps: [
       "Who is missing a daily today?",
-      "Is Berg Electric on site today?",
+      "Show HP logging backlog",
       "Which days this month had the most missing reports?",
     ],
   };

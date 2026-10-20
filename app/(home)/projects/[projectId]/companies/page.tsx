@@ -16,6 +16,7 @@ import {
   Mail,
   Phone,
   UserCheck,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -74,32 +75,73 @@ export default function CompaniesPage() {
     fetchCompanies();
   }, [fetchCompanies]);
 
-  const handleToggleTracking = async (companyId: string, currentTracked: boolean) => {
-    const nextTracked = !currentTracked;
-
+  const handleToggleTracking = async (company: ProjectCompany, nextTracked: boolean) => {
     // Optimistic UI update
     setCompanies((prev) =>
-      prev.map((c) => (c.id === companyId ? { ...c, isTracked: nextTracked } : c)),
+      prev.map((c) => (c.id === company.id ? { ...c, isTracked: nextTracked } : c)),
     );
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/companies/${companyId}/tracking`, {
-        method: "PATCH",
+      const res = await fetch(`/api/projects/${projectId}/companies`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isTracked: nextTracked }),
+        body: JSON.stringify({
+          action: "toggle-tracking",
+          companyId: company.id,
+          name: company.name,
+          isTracked: nextTracked,
+        }),
       });
       if (!res.ok) throw new Error("Failed to update tracking");
       const json = await res.json();
       if (json.success && Array.isArray(json.companies)) {
         setCompanies(json.companies);
+        setFeedback({
+          type: "success",
+          text: `Tracking updated: "${company.name}" is now ${nextTracked ? "tracked on" : "excluded from"} the bowling sheet.`,
+        });
       }
     } catch (err) {
       console.error(err);
       // Revert optimistic update
       setCompanies((prev) =>
-        prev.map((c) => (c.id === companyId ? { ...c, isTracked: currentTracked } : c)),
+        prev.map((c) => (c.id === company.id ? { ...c, isTracked: !nextTracked } : c)),
       );
       setFeedback({ type: "error", text: "Failed to update tracking toggle." });
+    }
+  };
+
+  const handleDeleteCompany = async (company: ProjectCompany) => {
+    if (!confirm(`Are you sure you want to delete "${company.name}" from this project? This will exclude it from the bowling sheet and dashboard.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/companies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          companyId: company.id,
+          name: company.name,
+          purgeReports: false,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to delete company");
+      }
+      setCompanies((prev) => prev.filter((c) => c.id !== company.id));
+      setFeedback({
+        type: "success",
+        text: `Removed "${company.name}" from the project.`,
+      });
+    } catch (err) {
+      console.error(err);
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to delete company",
+      });
     }
   };
 
@@ -407,7 +449,7 @@ export default function CompaniesPage() {
                           <Switch
                             id={`switch-${company.id}`}
                             checked={company.isTracked}
-                            onCheckedChange={() => handleToggleTracking(company.id, company.isTracked)}
+                            onCheckedChange={(checked) => handleToggleTracking(company, checked)}
                           />
                         </div>
 
@@ -427,6 +469,17 @@ export default function CompaniesPage() {
                         >
                           <Plus className="w-3.5 h-3.5 mr-1" />
                           Add Contact
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteCompany(company)}
+                          className="text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          title={`Delete ${company.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" />
+                          Delete
                         </Button>
                       </div>
                     </div>

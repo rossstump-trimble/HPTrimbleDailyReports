@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GRID_CELL_COLORS } from "@/lib/dashboard/statusMeta";
 import type { DashboardCell, DashboardPayload, DashboardTradePartner } from "@/lib/dashboard/types";
@@ -102,7 +103,13 @@ function GridCell({
   );
 }
 
-export function MonthlyGrid({ data }: { data: DashboardPayload }) {
+export function MonthlyGrid({
+  data,
+  onDeleteCompany,
+}: {
+  data: DashboardPayload;
+  onDeleteCompany?: (companyId: string, companyName?: string) => void;
+}) {
   const [query, setQuery] = useState("");
   const days = Array.from({ length: data.daysInMonth }, (_, i) => i + 1);
 
@@ -141,19 +148,25 @@ export function MonthlyGrid({ data }: { data: DashboardPayload }) {
                   Trade partner
                 </th>
                 {days.map((day) => {
-                  const sample = data.rows[0]?.cells[day - 1];
+                  const [y, m] = data.month.split("-").map(Number);
+                  const date = new Date(y, m - 1, day);
+                  const iso = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  const weekdayIdx = date.getDay();
+                  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekdayIdx];
+                  const isWeekend = weekdayIdx === 0 || weekdayIdx === 6;
+                  const isToday = iso === data.asOfDate;
                   return (
                     <th
                       key={day}
                       className={cn(
                         "px-0 py-2 text-center font-medium border-l border-border/70",
-                        sample?.isWeekend && "bg-muted/40",
-                        sample?.isToday && "bg-sky-50 dark:bg-sky-950/40",
+                        isWeekend && "bg-muted/40",
+                        isToday && "bg-sky-50 dark:bg-sky-950/40",
                       )}
                       style={{ minWidth: "38px", width: "38px" }}
                     >
-                      <div className="text-[9px] uppercase text-muted-foreground">{sample?.weekday}</div>
-                      <div className={cn("text-xs", sample?.isToday ? "text-sky-700 dark:text-sky-300 font-bold" : "text-foreground")}>
+                      <div className="text-[9px] uppercase text-muted-foreground">{weekday}</div>
+                      <div className={cn("text-xs", isToday ? "text-sky-700 dark:text-sky-300 font-bold" : "text-foreground")}>
                         {day}
                       </div>
                     </th>
@@ -168,26 +181,55 @@ export function MonthlyGrid({ data }: { data: DashboardPayload }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => (
-                <tr key={row.trade.id} className="border-b border-border/70 last:border-b-0">
-                  <th
-                    className="sticky left-0 z-20 bg-card text-left px-3 py-2 border-r border-border font-medium"
-                    style={{ minWidth: "200px" }}
+              {filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={data.daysInMonth + 3}
+                    className="px-6 py-12 text-center text-sm text-muted-foreground"
                   >
-                    <div className="text-[13px] text-foreground leading-tight">{row.trade.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{row.trade.category}</div>
-                  </th>
-                  {row.cells.map((cell) => (
-                    <GridCell key={cell.date} cell={cell} trade={row.trade} />
-                  ))}
-                  <td className="sticky right-[72px] z-10 bg-card text-center text-xs font-semibold tabular-nums border-l border-border">
-                    {row.monthTotalManpower.toLocaleString()}
-                  </td>
-                  <td className="sticky right-0 z-10 bg-card text-center text-xs font-semibold tabular-nums border-l border-border">
-                    {row.monthTotalHours.toLocaleString()}
+                    No trade partner companies in this dashboard yet.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((row) => (
+                  <tr key={row.trade.id} className="border-b border-border/70 last:border-b-0 group/row">
+                    <th
+                      className="sticky left-0 z-20 bg-card text-left px-3 py-2 border-r border-border font-medium"
+                      style={{ minWidth: "200px" }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-[13px] text-foreground leading-tight truncate">{row.trade.name}</div>
+                          <div className="text-[10px] text-muted-foreground truncate">{row.trade.category}</div>
+                        </div>
+                        {onDeleteCompany && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteCompany(row.trade.id, row.trade.name);
+                            }}
+                            className="opacity-0 group-hover/row:opacity-100 p-1 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-all shrink-0"
+                            title={`Delete ${row.trade.name}`}
+                            aria-label={`Delete ${row.trade.name}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </th>
+                    {row.cells.map((cell) => (
+                      <GridCell key={cell.date} cell={cell} trade={row.trade} />
+                    ))}
+                    <td className="sticky right-[72px] z-10 bg-card text-center text-xs font-semibold tabular-nums border-l border-border">
+                      {row.monthTotalManpower.toLocaleString()}
+                    </td>
+                    <td className="sticky right-0 z-10 bg-card text-center text-xs font-semibold tabular-nums border-l border-border">
+                      {row.monthTotalHours.toLocaleString()}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

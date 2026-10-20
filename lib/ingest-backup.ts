@@ -3,7 +3,13 @@ import path from 'path';
 import type { DailyReport } from '@/types/hpproto';
 
 export function defaultBackupRoot(): string {
-  return process.env.HPPROTO_BACKUP_ROOT || path.join(process.cwd(), 'data', 'ingested-dailies');
+  if (process.env.HPPROTO_BACKUP_ROOT) {
+    return process.env.HPPROTO_BACKUP_ROOT;
+  }
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    return path.join(process.cwd(), 'data', 'test-ingested-dailies');
+  }
+  return path.join(process.cwd(), 'data', 'ingested-dailies');
 }
 
 export interface IngestedFileAttachment {

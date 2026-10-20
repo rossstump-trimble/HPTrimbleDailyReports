@@ -1,8 +1,33 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { POST } from './submit/route';
-import { listLocalIngestedDailies, readIngestedDailyBackup } from '@/lib/ingest-backup';
+import { listLocalIngestedDailies, readIngestedDailyBackup, defaultBackupRoot } from '@/lib/ingest-backup';
+import { getDefaultDbPath } from '@/lib/store';
+import { uploadRoot } from '@/lib/upload-store';
+import fs from 'fs';
+
+function cleanupTestArtifacts() {
+  const dbPath = getDefaultDbPath();
+  if (dbPath.includes('test') && fs.existsSync(dbPath)) {
+    fs.rmSync(dbPath, { force: true });
+  }
+  const backupDir = defaultBackupRoot();
+  if (backupDir.includes('test') && fs.existsSync(backupDir)) {
+    fs.rmSync(backupDir, { recursive: true, force: true });
+  }
+  const upDir = uploadRoot();
+  if (upDir.includes('test') && fs.existsSync(upDir)) {
+    fs.rmSync(upDir, { recursive: true, force: true });
+  }
+}
 
 describe('Intake Submit Backup Hook', () => {
+  beforeEach(() => {
+    cleanupTestArtifacts();
+  });
+
+  afterEach(() => {
+    cleanupTestArtifacts();
+  });
   it('creates an on-disk backup when submitting a daily report via JSON', async () => {
     const testDate = `2026-09-${Math.floor(Math.random() * 10) + 10}`;
     const req = new Request('http://localhost:3000/api/intake/submit', {

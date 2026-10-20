@@ -2,7 +2,10 @@
 
 HP Demo Day prototype: ProjectSight-styled bowling sheet and trade daily intake.
 
-**Local UI work starts here:** [LOCAL-DEV.md](./LOCAL-DEV.md)
+**Local UI work starts here:** [LOCAL-DEV.md](./LOCAL-DEV.md)  
+**Security & Architecture Overview:** [docs/ARCHITECTURE_AND_SECURITY.md](./docs/ARCHITECTURE_AND_SECURITY.md)  
+**Security Brief (.docx):** [docs/Hensel_Phelps_Field_Operations_Architecture_and_Security.docx](./docs/Hensel_Phelps_Field_Operations_Architecture_and_Security.docx)  
+**Architecture & Security Diagrams (.drawio):** [docs/architecture-and-security.drawio](./docs/architecture-and-security.drawio)
 
 - Localhost uses **no Trimble Identity** (`http://localhost:3000`).
 - TID is only for the VPN/VM (`hp-trimble-lab.com`).

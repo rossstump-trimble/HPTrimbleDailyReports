@@ -1,7 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  compiler: {
-    removeConsole: process.env.NODE_ENV === "production",
+    compiler: {
+      removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error"] } : false,
+    },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      canvas: false,
+    };
+    return config;
   },
   async headers() {
     return [

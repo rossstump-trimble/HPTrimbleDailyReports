@@ -1,12 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET, POST } from './[projectId]/route';
 import { POST as commitPost } from './[projectId]/[inspectionId]/commit/route';
 import { POST as extractPost } from './[projectId]/extract/route';
-import { saveInspectionRecord, getInspectionById } from '@/lib/store';
+import { saveInspectionRecord, getInspectionById, getDefaultDbPath } from '@/lib/store';
+import fs from 'fs';
+
+function cleanupTestDb() {
+  const dbPath = getDefaultDbPath();
+  if (dbPath.includes('test') && fs.existsSync(dbPath)) {
+    fs.rmSync(dbPath, { force: true });
+  }
+}
 
 describe('Inspections API Routes', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    cleanupTestDb();
+  });
+
+  afterEach(() => {
+    cleanupTestDb();
   });
 
   it('GET returns inspections list for project', async () => {

@@ -5,6 +5,9 @@ export interface DashboardTradePartner {
   name: string;
   category: string;
   domain: string;
+  typicalCrew?: number;
+  companyName?: string;
+  submitterName?: string;
 }
 
 export interface DashboardCell {

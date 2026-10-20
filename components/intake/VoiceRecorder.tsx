@@ -4,15 +4,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import { AudioPulse } from "@/components/ui/audio-pulse";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   extensionForAudioMime,
   pickRecorderMimeType,
 } from "@/lib/audio-mime";
+import {
+  classifyGetUserMediaError,
+  micPermissionDialogCopy,
+  shouldPromptMicAccess,
+  type MicError,
+} from "@/lib/mic-permission";
 import { errorMessage, voiceLog } from "@/lib/voice-log";
 import { cn } from "@/lib/utils";
 
 const MAX_SECONDS = 180;
-
-type MicError = "unsupported" | "insecure" | "denied" | "not-found" | "unknown";
 
 function micErrorMessage(error: MicError): string {
   switch (error) {
@@ -21,7 +33,7 @@ function micErrorMessage(error: MicError): string {
     case "insecure":
       return "Microphone access needs HTTPS. Open this page over https and try again.";
     case "denied":
-      return "Microphone access was blocked. Enable it in your phone settings and try again.";
+      return "Microphone access was blocked. Tap Allow microphone to try again.";
     case "not-found":
       return "No microphone found on this device.";
     case "unknown":
@@ -30,26 +42,6 @@ function micErrorMessage(error: MicError): string {
       const _exhaustive: never = error;
       return _exhaustive;
     }
-  }
-}
-
-function classifyGetUserMediaError(err: unknown): MicError {
-  if (!err || typeof err !== "object") return "unknown";
-  const name = "name" in err ? String(err.name) : "";
-  switch (name) {
-    case "NotAllowedError":
-    case "PermissionDeniedError":
-      return "denied";
-    case "NotFoundError":
-    case "DevicesNotFoundError":
-      return "not-found";
-    case "NotSupportedError":
-    case "TypeError":
-      return "unsupported";
-    case "SecurityError":
-      return "insecure";
-    default:
-      return "unknown";
   }
 }
 
@@ -92,6 +84,7 @@ export default function VoiceRecorder({
   const [elapsed, setElapsed] = useState(0);
   const [volume, setVolume] = useState(0);
   const [error, setError] = useState<MicError | null>(null);
+  const [micDialogOpen, setMicDialogOpen] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -195,7 +188,6 @@ export default function VoiceRecorder({
 
   const startRecording = useCallback(async () => {
     if (disabled || recording || stoppingRef.current || startingRef.current) return;
-    setError(null);
 
     if (typeof window !== "undefined" && !window.isSecureContext) {
       voiceLog("recorder", "error", "insecure context, mic blocked", {
@@ -219,13 +211,17 @@ export default function VoiceRecorder({
     mimeRef.current = mimeType;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       streamRef.current = stream;
       chunksRef.current = [];
 
@@ -269,6 +265,8 @@ export default function VoiceRecorder({
       recorder.start(1000);
       setRecording(true);
       setElapsed(0);
+      setError(null);
+      setMicDialogOpen(false);
       voiceLog("recorder", "info", "recording started", {
         mimeType: mimeRef.current,
         trackCount: stream.getAudioTracks().length,
@@ -326,6 +324,61 @@ export default function VoiceRecorder({
     </button>
   );
 
+  const micCopy = micPermissionDialogCopy(
+    typeof navigator === "undefined" ? "" : navigator.userAgent,
+  );
+
+  const permissionDialog = (
+    <Dialog open={micDialogOpen} onOpenChange={setMicDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{micCopy.title}</DialogTitle>
+          <DialogDescription>{micCopy.body}</DialogDescription>
+        </DialogHeader>
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-gray-700 dark:text-gray-200">
+          {micCopy.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+        <DialogFooter className="gap-2">
+          <button
+            type="button"
+            onClick={() => setMicDialogOpen(false)}
+            className="rounded-xl px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMicDialogOpen(false);
+              void startRecording();
+            }}
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+            style={{ backgroundColor: "#0063a3" }}
+          >
+            {micCopy.tryAgainLabel}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  const errorLine = error ? (
+    <div className="mt-3 space-y-1.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-left">
+      <p className="text-xs font-medium text-amber-900 dark:text-amber-200">{micErrorMessage(error)}</p>
+      {shouldPromptMicAccess(error) && (
+        <button
+          type="button"
+          onClick={() => setMicDialogOpen(true)}
+          className="text-xs font-semibold text-[#0063a3] dark:text-blue-400 hover:underline block pt-1"
+        >
+          View microphone permission steps →
+        </button>
+      )}
+    </div>
+  ) : null;
+
   if (variant === "compact") {
     return (
       <div>
@@ -336,9 +389,8 @@ export default function VoiceRecorder({
         )}
         <AudioPulse active={recording} volume={volume} variant="small" className="mb-3 h-10" />
         {micButton}
-        {error && (
-          <p className="mt-3 text-xs text-red-600 dark:text-red-400">{micErrorMessage(error)}</p>
-        )}
+        {errorLine}
+        {permissionDialog}
       </div>
     );
   }
@@ -391,9 +443,8 @@ export default function VoiceRecorder({
         )}
       </button>
 
-      {error && (
-        <p className="mt-3 text-xs text-red-600 dark:text-red-400">{micErrorMessage(error)}</p>
-      )}
+      {errorLine}
+      {permissionDialog}
     </div>
   );
 }

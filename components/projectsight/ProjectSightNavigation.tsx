@@ -15,6 +15,9 @@ function isItemActive(pathname: string, item: MenuItem): boolean {
   if (item.path === "/projects") {
     return pathname === "/projects";
   }
+  if (item.id === "inspections" && (pathname.includes("/checklists") || pathname.includes("/inspections"))) {
+    return true;
+  }
   return pathname === item.path || pathname.startsWith(`${item.path}/`);
 }
 
@@ -23,7 +26,9 @@ export default function ProjectSightNavigation({
   className,
 }: ProjectSightNavigationProps) {
   const pathname = usePathname();
-  const menuItems = getSortedNavigationData();
+  const projectMatch = pathname.match(/\/projects\/([^/]+)/) || pathname.match(/\/intake\/([^/]+)/);
+  const activeProjectId = projectMatch ? projectMatch[1] : "1025";
+  const menuItems = getSortedNavigationData(activeProjectId);
 
   const renderMenuItem = (item: MenuItem) => {
     const isActive = isItemActive(pathname, item);

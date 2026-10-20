@@ -36,8 +36,8 @@ const ProjectSightHeaderHome = ({
 
   const logoSrc =
     !mounted || resolvedTheme !== "dark"
-      ? "/projectsight_logo.svg"
-      : "/projectsight_logo_dark.svg";
+      ? "/trimble-logo-blue.png"
+      : "/trimble-logo-white.png";
 
   return (
     <header
@@ -55,13 +55,13 @@ const ProjectSightHeaderHome = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link href="/projects">
+                  <Link href="/projects" className="flex items-center">
                     <Image
                       src={logoSrc}
-                      alt="ProjectSight"
-                      width={144}
-                      height={16}
-                      style={{ width: "auto", height: "auto", transform: "scale(0.7)", transformOrigin: "left center" }}
+                      alt="Trimble"
+                      width={130}
+                      height={28}
+                      className="h-6 w-auto object-contain"
                       priority={true}
                       loading="eager"
                     />
@@ -80,7 +80,8 @@ const ProjectSightHeaderHome = ({
         </Suspense>
       </div>
 
-      <div className="flex items-center space-x-1">
+      <div className="flex items-center space-x-1.5">
+        <div id="feedback-widget-mount" className="flex items-center" />
         <ModeToggle />
         <UserPopover />
       </div>

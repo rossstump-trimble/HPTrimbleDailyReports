@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FileText,
   Filter,
+  Handshake,
   Loader2,
   Paperclip,
   Plus,
@@ -414,6 +415,11 @@ export default function ReviewQueuePage() {
                           <span>·</span>
                           <span className="flex items-center gap-1.5">
                             By: <strong className="text-foreground">{report.submittedBy || "Field Foreman"}</strong>
+                            {report.isHpEmployee && (
+                              <Badge className="bg-[#0063a3] text-white hover:bg-[#0063a3] text-[10px] py-0 h-4 font-bold">
+                                HP Staff
+                              </Badge>
+                            )}
                             {isVerified ? (
                               <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] gap-1 py-0 h-4 font-normal">
                                 <UserCheck className="w-2.5 h-2.5" /> PS Contact Verified
@@ -560,6 +566,18 @@ export default function ReviewQueuePage() {
                             <span className="text-muted-foreground">{report.tierSubsSummary}</span>
                           )}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Trades & Favors */}
+                    {report.tradesAndFavors && (
+                      <div className="text-xs space-y-1">
+                        <span className="font-semibold text-foreground flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                          <Handshake className="h-3.5 w-3.5" /> Trades &amp; Favors for Partners:
+                        </span>
+                        <p className="text-muted-foreground whitespace-pre-line bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
+                          {report.tradesAndFavors}
+                        </p>
                       </div>
                     )}
 
@@ -711,6 +729,21 @@ export default function ReviewQueuePage() {
                   onChange={(e) =>
                     setSelectedReport({ ...selectedReport, notes: e.target.value })
                   }
+                  className="text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                  <Handshake className="h-3.5 w-3.5" /> Trades &amp; Favors Done for Trade Partners
+                </Label>
+                <Textarea
+                  rows={2}
+                  value={selectedReport.tradesAndFavors || ""}
+                  onChange={(e) =>
+                    setSelectedReport({ ...selectedReport, tradesAndFavors: e.target.value })
+                  }
+                  placeholder="Record any favors, equipment loaned, or trade coordination..."
                   className="text-xs"
                 />
               </div>

@@ -36,4 +36,8 @@ describe('extractedDailyHasContent', () => {
     expect(extractedDailyHasContent({ workerCount: 3 })).toBe(true);
     expect(extractedDailyHasContent({ workerCount: 0 })).toBe(false);
   });
+
+  it('is true when OCR source pages were captured', () => {
+    expect(extractedDailyHasContent({ sourcePages: [{ page: 1, text: 'ALC' }] })).toBe(true);
+  });
 });

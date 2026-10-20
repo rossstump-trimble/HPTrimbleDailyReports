@@ -80,10 +80,10 @@ export async function GET(request: NextRequest) {
     const payload = idPayload || accessPayload || {};
 
     const sub = (payload.sub as string) || "";
-    const email = (payload.email as string) || (payload.preferred_username as string) || "ross_stump@trimble.com";
+    const email = (payload.email as string) || (payload.preferred_username as string) || "";
     const givenName = (payload.given_name as string) || "";
     const familyName = (payload.family_name as string) || "";
-    const name = (payload.name as string) || (givenName ? `${givenName} ${familyName}`.trim() : email.split("@")[0]);
+    const name = (payload.name as string) || (givenName ? `${givenName} ${familyName}`.trim() : (email ? email.split("@")[0] : ""));
 
     const sessionData = {
       sub,
@@ -92,6 +92,7 @@ export async function GET(request: NextRequest) {
       given_name: givenName,
       family_name: familyName,
       access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || undefined,
       expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
     };
 

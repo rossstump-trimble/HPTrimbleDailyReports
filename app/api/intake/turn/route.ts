@@ -51,6 +51,10 @@ export async function POST(req: Request) {
     let transcript = '';
     let extracted: ExtractedDaily = {};
 
+    const typedRaw = formData.get('transcript');
+    const typedTranscript = typeof typedRaw === 'string' ? typedRaw.trim() : '';
+    const advance = formData.get('advance') !== 'false';
+    const audience = formData.get('audience') === 'hp' ? ('hp' as const) : ('trade' as const);
     const file = formData.get('file');
     const hadFile = file instanceof File;
     voiceLog('turn-route', 'info', 'turn request', {
@@ -63,6 +67,8 @@ export async function POST(req: Request) {
       fileBytes: hadFile ? file.size : 0,
       fileType: hadFile ? file.type : null,
       fileName: hadFile ? file.name : null,
+      typedChars: typedTranscript.length,
+      advance,
     });
 
     if (!skip && hadFile) {
@@ -95,6 +101,18 @@ export async function POST(req: Request) {
         preview: previewText(transcript),
         extractedKeys: Object.keys(extracted).filter((key) => extracted[key as keyof ExtractedDaily] != null),
       });
+    } else if (!skip && typedTranscript) {
+      transcript = typedTranscript;
+      extracted = stripTranscriptOnlyNotes(
+        await extractDailyFromTranscript(transcript, requestId),
+        transcript,
+      );
+      voiceLog('turn-route', 'info', 'extracted typed transcript', {
+        requestId,
+        transcriptChars: transcript.length,
+        preview: previewText(transcript),
+        extractedKeys: Object.keys(extracted).filter((key) => extracted[key as keyof ExtractedDaily] != null),
+      });
     }
 
     const result = applyInterviewTurn({
@@ -105,6 +123,8 @@ export async function POST(req: Request) {
       extracted,
       transcript,
       skip,
+      advance,
+      audience,
     });
 
     voiceLog('turn-route', 'info', 'turn ok', {

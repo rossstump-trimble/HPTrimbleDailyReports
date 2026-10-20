@@ -114,3 +114,74 @@ export async function exchangeCodeForTokens(
   });
   return tokens;
 }
+
+export async function refreshTIDTokens(refreshToken: string): Promise<TIDTokens> {
+  const config = getTIDConfig();
+  const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
+
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: config.clientId,
+  });
+
+  logAuthEvent("tid.token_refresh.start", {
+    tokenUrl: config.tokenUrl,
+    hasRefreshToken: Boolean(refreshToken),
+  });
+
+  const response = await fetch(config.tokenUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${basicAuth}`,
+      Accept: "application/json",
+    },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    logAuthEvent("tid.token_refresh.fail", {
+      status: response.status,
+      detail: errText.slice(0, 400),
+    });
+    throw new Error(`TID Token refresh failed (${response.status}): ${errText}`);
+  }
+
+  const tokens = (await response.json()) as TIDTokens;
+  logAuthEvent("tid.token_refresh.ok", {
+    expiresIn: tokens.expires_in || 0,
+    hasAccessToken: Boolean(tokens.access_token),
+    hasRefreshToken: Boolean(tokens.refresh_token),
+  });
+  return tokens;
+}
+
+export async function fetchClientCredentialsToken(): Promise<string> {
+  const config = getTIDConfig();
+  const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
+
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    scope: config.scopes,
+  });
+
+  const response = await fetch(config.tokenUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${basicAuth}`,
+      Accept: "application/json",
+    },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`TID Client Credentials failed (${response.status}): ${errText}`);
+  }
+
+  const json = (await response.json()) as { access_token: string };
+  return json.access_token;
+}

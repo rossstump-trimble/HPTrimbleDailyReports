@@ -19,6 +19,7 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
   "tierSubcontractors": [{ "name": "subcontractor company", "count": number, "trade": "trade/craft" }],
   "tierSubsSummary": "summary of tier subcontractors or 'None'",
   "equipment": ["equipment item 1", "equipment item 2"],
+  "tradesAndFavors": "any favors, equipment loans, trade coordination, or assistance done for trade partners/subcontractors",
   "notes": "combined string including delays, coordination items, discrepancies, and safety observations",
   "staCompleted": true or false (Short-Term Anchor / safety task assignment completed),
   "ocrPages": ["verbatim text from page 1", "verbatim text from page 2"]
@@ -47,6 +48,7 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
   "tierSubcontractors": [{ "name": "subcontractor company", "count": number, "trade": "trade/craft" }],
   "tierSubsSummary": "summary of tier subcontractors or 'None'",
   "equipment": ["equipment item 1", "equipment item 2"],
+  "tradesAndFavors": "any favors, equipment loans, trade coordination, or assistance done for trade partners/subcontractors",
   "notes": "combined string including delays, coordination items, discrepancies, and safety observations",
   "staCompleted": true or false (Short-Term Anchor / safety task assignment completed)
 }
@@ -87,6 +89,7 @@ export function parseGeminiDailyJson(text: string): ExtractedDaily {
       result.equipment = (parsed.equipment as unknown[]).filter(e => typeof e === 'string') as string[];
     }
     if (typeof parsed.notes === 'string') result.notes = parsed.notes;
+    if (typeof parsed.tradesAndFavors === 'string') result.tradesAndFavors = parsed.tradesAndFavors;
     if (typeof parsed.staCompleted === 'boolean') result.staCompleted = parsed.staCompleted;
     if (Array.isArray(parsed.emailRecipients)) {
       result.emailRecipients = (parsed.emailRecipients as unknown[]).filter(e => typeof e === 'string') as string[];

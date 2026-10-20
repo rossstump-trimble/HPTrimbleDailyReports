@@ -572,19 +572,50 @@ export async function listChecklists(
   projectId: string,
 ): Promise<ProjectSightChecklistRef[]> {
   try {
-    const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/list`;
+    const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists`;
     const payload = await psFetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: projectSightHeaders(accessToken),
-      body: JSON.stringify({}),
     });
-    const parsed = items(payload).map((item) => ({
-      id: String(caseGet(item, ['ChecklistId', 'ChecklistGuid', 'Id', 'id']) || ''),
-      number: String(caseGet(item, ['ChecklistNumber', 'Number', 'number']) || ''),
-      title: String(caseGet(item, ['Title', 'Name', 'title']) || 'Untitled Checklist'),
-      workflowState: String(caseGet(item, ['WorkflowState', 'Status', 'status']) || 'Open'),
-      location: (caseGet(item, ['Location', 'location']) as string) || undefined,
-    })).filter((ck) => ck.id);
+    const parsed = items(payload).map((item) => {
+      const id = String(caseGet(item, ['ChecklistID', 'ChecklistId', 'ChecklistGuid', 'Id', 'id']) || '');
+      const rawNum = caseGet(item, ['ChecklistNumber', 'Number', 'number']);
+      const number = rawNum != null && String(rawNum).trim() ? String(rawNum).trim() : `CK-${id}`;
+      const rawTitle = caseGet(item, ['WorkDescription', 'Title', 'Name', 'title']);
+      const title = rawTitle != null && String(rawTitle).trim() ? String(rawTitle).trim() : (number && number !== `CK-${id}` ? `Checklist ${number}` : 'Pre-Placement Concrete Inspection');
+      const workflowState = String(caseGet(item, ['WorkflowStateName', 'WorkflowState', 'Status', 'status']) || 'Draft');
+      const location = (caseGet(item, ['Location', 'location']) as string) || undefined;
+
+      const rawItems = (caseGet(item, ['ChecklistItems', 'Items', 'items']) || []) as Record<string, unknown>[];
+      const parsedItems = Array.isArray(rawItems)
+        ? rawItems.map((it, itemIdx) => {
+            const rawStatus = String(caseGet(it, ['Status', 'Response', 'status']) || 'None');
+            let result: string = 'Unchecked';
+            if (rawStatus.toLowerCase() === 'yes') result = 'Pass';
+            else if (rawStatus.toLowerCase() === 'no') result = 'Fail';
+            else if (rawStatus.toLowerCase() === 'na') result = 'N/A';
+            else if (rawStatus.toLowerCase() === 'none') result = 'Unchecked';
+            else result = rawStatus;
+
+            return {
+              id: String(caseGet(it, ['ChecklistItemID', 'ChecklistItemId', 'GUID', 'Id', 'id']) || `item-${itemIdx + 1}`),
+              itemNumber: Number(caseGet(it, ['SortOrder', 'ItemNumber', 'itemNumber']) ?? itemIdx + 1),
+              prompt: String(caseGet(it, ['Description', 'prompt', 'Value', 'value']) || `Item ${itemIdx + 1}`),
+              result,
+              comment: (caseGet(it, ['Value', 'Comments', 'comment']) as string) || undefined,
+            };
+          })
+        : [];
+
+      return {
+        id,
+        number,
+        title,
+        workflowState,
+        location,
+        items: parsedItems,
+      };
+    }).filter((ck) => ck.id);
 
     if (parsed.length > 0) return parsed;
   } catch (err) {
@@ -615,20 +646,47 @@ export async function updateChecklistItems(
   itemsList: { id?: string; itemNumber: number; prompt?: string; result: string; comment?: string }[],
   workflowState?: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/${checklistId}`;
+  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists`;
+  const validItems = itemsList
+    .filter((it) => it.id && !it.id.startsWith('item-'))
+    .map((it) => {
+      const isPass = it.result === 'Pass';
+      const isFail = it.result === 'Fail';
+      const isNA = it.result === 'N/A';
+
+      const status = isPass ? 'Yes' : isFail ? 'No' : isNA ? 'NA' : it.result;
+      const itemPayload: Record<string, unknown> = {
+        Status: status,
+      };
+
+      const numId = Number(it.id);
+      if (!isNaN(numId)) {
+        itemPayload.ChecklistItemID = numId;
+      } else {
+        itemPayload.GUID = it.id;
+      }
+
+      // For ProjectSight Yes/No checklist items (ValueType 10), Value must be boolean string ("true"/"false") or null
+      if (it.comment) {
+        itemPayload.Value = it.comment;
+      } else if (isPass) {
+        itemPayload.Value = 'true';
+      } else if (isFail) {
+        itemPayload.Value = 'false';
+      }
+
+      return itemPayload;
+    });
+
   const body: Record<string, unknown> = {
-    ChecklistItems: itemsList.map((it) => ({
-      ChecklistItemId: it.id,
-      ItemNumber: it.itemNumber,
-      Response: it.result,
-      Comments: it.comment || '',
-    })),
+    ChecklistID: Number(checklistId) || checklistId,
+    ChecklistItems: validItems,
   };
   if (workflowState) {
-    body.WorkflowState = workflowState;
+    body.WorkflowStateName = workflowState;
   }
   const payload = await psFetch(url, {
-    method: 'PUT',
+    method: 'POST',
     headers: projectSightHeaders(accessToken),
     body: JSON.stringify(body),
   });

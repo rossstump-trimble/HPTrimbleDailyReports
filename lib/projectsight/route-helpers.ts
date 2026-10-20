@@ -2,10 +2,22 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { SESSION_COOKIE } from '@/lib/local-session';
 import { ProjectSightHttpError } from '@/lib/projectsight/client';
-import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
+import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 
 export function requireTidToken(): string | NextResponse {
   const token = tidAccessTokenFromCookie(cookies().get(SESSION_COOKIE)?.value);
+  if (!token) {
+    return NextResponse.json(
+      { error: 'Sign in required' },
+      { status: 401 },
+    );
+  }
+  return token;
+}
+
+export async function requireTidTokenAsync(): Promise<string | NextResponse> {
+  const raw = cookies().get(SESSION_COOKIE)?.value;
+  const { token } = await getValidTidAccessToken(raw);
   if (!token) {
     return NextResponse.json(
       { error: 'Sign in required' },

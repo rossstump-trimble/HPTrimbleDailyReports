@@ -74,7 +74,11 @@ export async function POST(req: Request) {
     let files: File[] = [];
     let staFiles: File[] = [];
 
-    if (contentType.includes('multipart/form-data')) {
+    const isMultipart =
+      contentType.includes('multipart/form-data') ||
+      (!contentType && typeof (req as any).formData === 'function');
+
+    if (isMultipart) {
       const parsed = await dailyFromFormData(await req.formData());
       files = parsed.files || (parsed.file ? [parsed.file] : []);
       staFiles = parsed.staFiles || [];

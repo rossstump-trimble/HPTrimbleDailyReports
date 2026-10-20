@@ -12,7 +12,9 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  DEFAULT_DESTINATION,
   DESTINATION_COOKIE,
+  destinationFromCookieWithFallback,
   parseDestinationJson,
   serializeDestination,
   type ProjectSightDestination,
@@ -23,13 +25,12 @@ interface NamedRef {
   name: string;
 }
 
-function readCookieDestination(): ProjectSightDestination | null {
-  if (typeof document === "undefined") return null;
+function readCookieDestination(): ProjectSightDestination {
+  if (typeof document === "undefined") return DEFAULT_DESTINATION;
   const raw = document.cookie
     .split("; ")
     .find((part) => part.startsWith(`${DESTINATION_COOKIE}=`));
-  if (!raw) return null;
-  return parseDestinationJson(decodeURIComponent(raw.slice(DESTINATION_COOKIE.length + 1)));
+  return destinationFromCookieWithFallback(raw ? raw.slice(DESTINATION_COOKIE.length + 1) : null);
 }
 
 function writeCookieDestination(dest: ProjectSightDestination) {

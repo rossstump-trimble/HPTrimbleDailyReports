@@ -50,6 +50,8 @@ export interface Project {
   excludedTradePartnerIds?: string[];
   psPortfolioId?: string;
   psProjectId?: string;
+  lat?: number;
+  lon?: number;
 }
 
 export interface CrewEntry {

@@ -1,30 +1,18 @@
 import { NextResponse } from 'next/server';
-import type { DailyReport } from '@/types/hpproto';
 import { getDailyReportById, markDailySentToProjectSight } from '@/lib/store';
 import { readUpload } from '@/lib/upload-store';
 import { sendFog617ToProjectSight } from '@/lib/projectsight/send-daily';
-import { projectSightErrorResponse, requireTidToken } from '@/lib/projectsight/route-helpers';
+import { captureFromDailyReport } from '@/lib/projectsight/send-intake-daily';
+import { projectSightErrorResponse, requireTidTokenAsync } from '@/lib/projectsight/route-helpers';
 import type { Fog617Capture } from '@/lib/projectsight/map-daily';
+
+import { DEFAULT_DESTINATION } from '@/lib/projectsight/destination';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-function captureFromDaily(report: DailyReport): Fog617Capture {
-  return {
-    tradePartnerName: report.tradePartnerName,
-    date: report.date,
-    locationDescription: report.locationDescription,
-    workerCount: report.workerCount,
-    totalHours: report.totalHours,
-    crewBreakdown: report.crewBreakdown,
-    equipment: report.equipment,
-    notes: report.notes,
-    staCompleted: report.staCompleted,
-  };
-}
-
 export async function POST(request: Request) {
-  const token = requireTidToken();
+  const token = await requireTidTokenAsync();
   if (token instanceof NextResponse) return token;
 
   const contentType = request.headers.get('content-type') || '';
@@ -32,8 +20,8 @@ export async function POST(request: Request) {
   try {
     if (contentType.includes('multipart/form-data')) {
       const form = await request.formData();
-      const portfolioId = String(form.get('portfolioId') || '');
-      const projectId = String(form.get('projectId') || '');
+      const portfolioId = String(form.get('portfolioId') || DEFAULT_DESTINATION.portfolioId);
+      const projectId = String(form.get('projectId') || DEFAULT_DESTINATION.projectId);
       const dailyRaw = form.get('daily');
       const file = form.get('file');
       if (!portfolioId || !projectId) {
@@ -64,8 +52,8 @@ export async function POST(request: Request) {
       projectId?: string;
       localDailyId?: string;
     };
-    const portfolioId = body.portfolioId || '';
-    const projectId = body.projectId || '';
+    const portfolioId = body.portfolioId || DEFAULT_DESTINATION.portfolioId;
+    const projectId = body.projectId || DEFAULT_DESTINATION.projectId;
     const localDailyId = body.localDailyId || '';
     if (!portfolioId || !projectId || !localDailyId) {
       return NextResponse.json(
@@ -89,7 +77,7 @@ export async function POST(request: Request) {
       token,
       portfolioId,
       projectId,
-      capture: captureFromDaily(report),
+      capture: captureFromDailyReport(report),
       fileName: report.rawSourceFileName || 'FOG617.bin',
       fileBytes,
       mimeType: 'application/octet-stream',

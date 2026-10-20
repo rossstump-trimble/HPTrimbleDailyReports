@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   ClipboardCheck,
   Camera,
@@ -32,6 +32,7 @@ import type {
 
 export default function InspectionsPage() {
   const params = useParams<{ projectId: string }>();
+  const searchParams = useSearchParams();
   const projectId = params.projectId;
 
   const [inspections, setInspections] = useState<InspectionRecord[]>([]);
@@ -53,7 +54,8 @@ export default function InspectionsPage() {
   const fetchInspections = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/inspections/${projectId}`);
+      const qs = searchParams.toString();
+      const res = await fetch(`/api/inspections/${projectId}${qs ? `?${qs}` : ""}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.inspections)) {
         setInspections(data.inspections);
@@ -63,7 +65,7 @@ export default function InspectionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, searchParams]);
 
   useEffect(() => {
     fetchInspections();
@@ -72,7 +74,8 @@ export default function InspectionsPage() {
   const handleSyncProjectSight = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch(`/api/inspections/${projectId}`, { method: "POST" });
+      const qs = searchParams.toString();
+      const res = await fetch(`/api/inspections/${projectId}${qs ? `?${qs}` : ""}`, { method: "POST" });
       const data = await res.json();
       if (data.success && Array.isArray(data.inspections)) {
         setInspections(data.inspections);

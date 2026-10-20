@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Sheet,
   SheetContent,
@@ -51,6 +52,7 @@ export function InspectionVerifyDrawer({
   inspections,
   onCommitSuccess,
 }: InspectionVerifyDrawerProps) {
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<ExtractedInspectionItem[]>([]);
   const [selectedInspectionId, setSelectedInspectionId] = useState<string>('');
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
@@ -131,8 +133,9 @@ export function InspectionVerifyDrawer({
         imageFileName: `${extraction.checklistNumber || 'inspection'}_scan.jpg`,
       };
 
+      const qs = searchParams.toString();
       const res = await fetch(
-        `/api/inspections/${projectId}/${selectedInspectionId}/commit`,
+        `/api/inspections/${projectId}/${selectedInspectionId}/commit${qs ? `?${qs}` : ''}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -143,6 +146,10 @@ export function InspectionVerifyDrawer({
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || 'Failed to commit inspection');
+      }
+
+      if (json.psSynced === false && json.psSyncError) {
+        throw new Error(`Local record saved, but ProjectSight sync failed: ${json.psSyncError}`);
       }
 
       onCommitSuccess(json.inspection);

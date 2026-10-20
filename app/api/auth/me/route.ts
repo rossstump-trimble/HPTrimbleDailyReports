@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalAuthRequest } from "@/lib/auth-mode";
 import { LOCAL_USER } from "@/lib/local-session";
+import { getValidTidAccessToken } from "@/lib/projectsight/session-token";
 
 export const dynamic = "force-dynamic";
 
@@ -38,15 +39,29 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = JSON.parse(sessionCookie);
-    return NextResponse.json({
-      authenticated: true,
+    const { token, refreshedSession } = await getValidTidAccessToken(sessionCookie);
+
+    const response = NextResponse.json({
+      authenticated: Boolean(token),
       mode: "tid",
       user: {
-        name: session.name || "Ross Stump",
-        email: session.email || "ross_stump@trimble.com",
+        name: session.name || "",
+        email: session.email || "",
         sub: session.sub,
       },
     });
+
+    if (refreshedSession) {
+      response.cookies.set("ps_session", JSON.stringify(refreshedSession), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+    }
+
+    return response;
   } catch {
     return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
   }
