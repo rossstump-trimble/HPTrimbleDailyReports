@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getProjects, createProject, getCapacityStatus } from '@/lib/store';
+import { requireAuthResponse } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = requireAuthResponse(req);
+  if (denied) return denied;
+
   try {
     const projects = getProjects();
     const capacity = getCapacityStatus();
@@ -18,6 +22,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = requireAuthResponse(req);
+  if (denied) return denied;
+
   try {
     const body = (await req.json()) as {
       name: string;
@@ -33,12 +40,12 @@ export async function POST(req: Request) {
     }
 
     const created = createProject({
-      name: body.name.trim(),
-      code: body.code?.trim(),
+      name: body.name.trim().slice(0, 160),
+      code: body.code?.trim().slice(0, 32),
       workingDays: body.workingDays,
       tradePartners: body.tradePartners,
-      psPortfolioId: body.psPortfolioId,
-      psProjectId: body.psProjectId,
+      psPortfolioId: body.psPortfolioId?.trim().slice(0, 64),
+      psProjectId: body.psProjectId?.trim().slice(0, 64),
     });
 
     return NextResponse.json({ project: created }, { status: 201 });

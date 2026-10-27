@@ -1,8 +1,6 @@
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { getProjectById, updateProjectWorkingDays, updateProjectTradePartners, deleteProject, getCapacityStatus } from '@/lib/store';
-import { SESSION_COOKIE, parseVerifiedSession } from '@/lib/local-session';
-import { isLocalAuthRequest } from '@/lib/auth-mode';
+import { getRequestAuthContext, requireAuthResponse, requireAdminResponse } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
@@ -13,22 +11,10 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    let isAuthed = false;
-    try {
-      if (isLocalAuthRequest(req)) {
-        isAuthed = true;
-      } else {
-        const jar = cookies();
-        const session = parseVerifiedSession(jar.get(SESSION_COOKIE)?.value);
-        isAuthed = session !== null;
-      }
-    } catch {
-      isAuthed = false;
-    }
-
+    const auth = getRequestAuthContext(req);
     const capacity = getCapacityStatus();
 
-    if (!isAuthed) {
+    if (!auth.authenticated) {
       // Return redacted project view for public QR intake form
       return NextResponse.json({
         project: {
@@ -54,6 +40,9 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
 }
 
 export async function PATCH(req: Request, { params }: { params: { projectId: string } }) {
+  const denied = requireAuthResponse(req);
+  if (denied) return denied;
+
   try {
     const body = (await req.json()) as {
       workingDays?: number[];
@@ -80,7 +69,10 @@ export async function PATCH(req: Request, { params }: { params: { projectId: str
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { projectId: string } }) {
+export async function DELETE(req: Request, { params }: { params: { projectId: string } }) {
+  const denied = requireAdminResponse(req);
+  if (denied) return denied;
+
   try {
     const deleted = deleteProject(params.projectId);
     if (!deleted) {

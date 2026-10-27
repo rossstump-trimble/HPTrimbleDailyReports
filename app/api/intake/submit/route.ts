@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import {
@@ -10,16 +11,78 @@ import {
 } from '@/lib/store';
 import { saveUpload, readUpload } from '@/lib/upload-store';
 import { backupIngestedDaily, type IngestedFileAttachment } from '@/lib/ingest-backup';
-import type { DailyReport } from '@/types/hpproto';
+import type { CrewEntry, DailyReport, TierSubcontractor } from '@/types/hpproto';
 import { slugTradePartnerId } from '@/lib/trade-partner';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
-import { SESSION_COOKIE, parseVerifiedSession } from '@/lib/local-session';
-import { isLocalAuthRequest } from '@/lib/auth-mode';
+import { SESSION_COOKIE } from '@/lib/local-session';
+import { getRequestAuthContext } from '@/lib/api-auth';
 import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import { sendFog617ToProjectSight } from '@/lib/projectsight/send-daily';
 import { captureFromDailyReport } from '@/lib/projectsight/send-intake-daily';
 
 export const runtime = 'nodejs';
+
+const MAX_UPLOAD_FILES = 10;
+const MAX_UPLOAD_BYTES_PER_FILE = 15 * 1024 * 1024; // 15 MB
+const MAX_UPLOAD_BYTES_TOTAL = 35 * 1024 * 1024; // 35 MB
+const MAX_CREW_ROWS = 30;
+const MAX_TIER_SUBS = 30;
+const MAX_EQUIPMENT_ITEMS = 40;
+const MAX_EMAIL_RECIPIENTS = 10;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function sanitizeText(val: unknown, maxLen: number): string {
+  if (typeof val !== 'string') return '';
+  return val.trim().slice(0, maxLen);
+}
+
+function sanitizeCrewBreakdown(raw: unknown): CrewEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, MAX_CREW_ROWS)
+    .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === 'object')
+    .map((r) => ({
+      craft: sanitizeText(r.craft, 80) || 'Craft',
+      count: Math.max(0, Math.min(1000, Number(r.count) || 0)),
+      hoursPerWorker:
+        r.hoursPerWorker != null
+          ? Math.max(0, Math.min(24, Number(r.hoursPerWorker) || 0))
+          : undefined,
+      totalHours:
+        r.totalHours != null
+          ? Math.max(0, Math.min(24000, Number(r.totalHours) || 0))
+          : undefined,
+    }));
+}
+
+function sanitizeTierSubcontractors(raw: unknown): TierSubcontractor[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, MAX_TIER_SUBS)
+    .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === 'object')
+    .map((s) => ({
+      name: sanitizeText(s.name, 120),
+      count: Math.max(0, Math.min(1000, Number(s.count ?? s.workerCount) || 0)),
+      trade: sanitizeText(s.trade, 80) || undefined,
+    }))
+    .filter((s) => s.name.length > 0);
+}
+
+function sanitizeEquipment(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, MAX_EQUIPMENT_ITEMS)
+    .map((e) => sanitizeText(e, 120))
+    .filter(Boolean);
+}
+
+function sanitizeEmails(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, MAX_EMAIL_RECIPIENTS)
+    .map((e) => sanitizeText(e, 160).toLowerCase())
+    .filter((e) => EMAIL_RE.test(e));
+}
 
 type IntakeFormData = Omit<Partial<DailyReport>, 'staFiles' | 'rawSourceFiles'> & {
   files?: File[];
@@ -43,6 +106,9 @@ async function dailyFromFormData(form: FormData): Promise<IntakeFormData> {
 
   const dailyRaw = form.get('daily');
   if (typeof dailyRaw === 'string' && dailyRaw.trim()) {
+    if (dailyRaw.length > 200_000) {
+      throw new Error('Daily payload exceeds maximum allowed size');
+    }
     const parsed = JSON.parse(dailyRaw) as Record<string, unknown>;
     const { files: _f, staFiles: _sf, ...rest } = parsed;
     return { ...rest, files, file, staFiles } as IntakeFormData;
@@ -96,16 +162,42 @@ export async function POST(req: Request) {
       body = (await req.json()) as Partial<DailyReport>;
     }
 
-    const { projectId, date } = body;
-    const tradePartnerName = (body.tradePartnerName ?? '').trim();
+    const projectId = sanitizeText(body.projectId, 120);
+    const date = sanitizeText(body.date, 10);
+    const tradePartnerName = sanitizeText(body.tradePartnerName, 160);
     const tradePartnerId =
-      body.tradePartnerId?.trim() || (tradePartnerName ? slugTradePartnerId(tradePartnerName) : '');
+      sanitizeText(body.tradePartnerId, 120) ||
+      (tradePartnerName ? slugTradePartnerId(tradePartnerName) : '');
 
-    if (!projectId || !tradePartnerId || !date) {
+    if (!projectId || !tradePartnerId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: projectId, company name, date' },
+        { success: false, error: 'Missing or invalid required fields: projectId, company name, date (YYYY-MM-DD)' },
         { status: 400 },
       );
+    }
+
+    if (files.length + staFiles.length > MAX_UPLOAD_FILES) {
+      return NextResponse.json(
+        { success: false, error: `Maximum ${MAX_UPLOAD_FILES} files allowed per submission` },
+        { status: 413 },
+      );
+    }
+
+    let totalUploadBytes = 0;
+    for (const f of [...files, ...staFiles]) {
+      if (f.size > MAX_UPLOAD_BYTES_PER_FILE) {
+        return NextResponse.json(
+          { success: false, error: `File ${f.name} exceeds 15 MB limit` },
+          { status: 413 },
+        );
+      }
+      totalUploadBytes += f.size;
+      if (totalUploadBytes > MAX_UPLOAD_BYTES_TOTAL) {
+        return NextResponse.json(
+          { success: false, error: 'Total upload size exceeds 35 MB limit' },
+          { status: 413 },
+        );
+      }
     }
 
     const targetProject = getProjectById(projectId);
@@ -116,15 +208,24 @@ export async function POST(req: Request) {
       );
     }
 
-    let isAuthedStaff = false;
+    const auth = getRequestAuthContext(req);
+    const isAuthedStaff = auth.authenticated;
+
+    if (!isAuthedStaff && targetProject.requireIntakeToken && targetProject.intakeToken) {
+      const suppliedToken = sanitizeText((body as Record<string, unknown>).intakeToken, 64);
+      if (suppliedToken !== targetProject.intakeToken) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid or missing jobsite QR access token.' },
+          { status: 403 },
+        );
+      }
+    }
     let sessionCookie: string | undefined;
     try {
       const jar = cookies();
       sessionCookie = jar.get(SESSION_COOKIE)?.value;
-      const verified = parseVerifiedSession(sessionCookie);
-      isAuthedStaff = verified !== null || isLocalAuthRequest(req);
     } catch {
-      isAuthedStaff = isLocalAuthRequest(req);
+      // ignore outside request context
     }
 
     // Only authenticated staff can submit HP employee direct reports or update existing report IDs
@@ -137,9 +238,10 @@ export async function POST(req: Request) {
     }
 
     const existingReport = body.id && isAuthedStaff ? getDailyReportById(body.id) : undefined;
+    const randSuffix = crypto.randomBytes(6).toString('hex');
     const id = existingReport
       ? existingReport.id
-      : `${projectId}-${tradePartnerId}-${date}-${Date.now()}`;
+      : `${projectId}-${tradePartnerId}-${date}-${randSuffix}`;
 
     let rawSourcePath = existingReport?.rawSourcePath;
     let rawSourceFileName = existingReport?.rawSourceFileName;
@@ -182,27 +284,35 @@ export async function POST(req: Request) {
       savedStaAttachments = staAttachments;
     }
 
+    const sanitizedCrew = isHp ? [] : sanitizeCrewBreakdown(body.crewBreakdown);
+    const sanitizedWorkerCount = isHp
+      ? 0
+      : Math.max(0, Math.min(5000, Number(body.workerCount) || 0));
+    const sanitizedTotalHours = isHp
+      ? 0
+      : Math.max(0, Math.min(100000, Number(body.totalHours) || 0));
+
     const report: DailyReport = {
       id,
       projectId,
       tradePartnerId,
-      tradePartnerName: tradePartnerName || body.tradePartnerName || '',
+      tradePartnerName: tradePartnerName || 'Trade Partner',
       date,
       submittedAt: existingReport?.submittedAt || new Date().toISOString(),
-      submittedBy: body.submittedBy || (isHp ? 'HP Staff' : 'Field Intake'),
-      locationDescription: body.locationDescription ?? '',
-      workerCount: isHp ? 0 : (body.workerCount ?? 0),
-      totalHours: isHp ? 0 : (body.totalHours ?? 0),
-      crewBreakdown: isHp ? [] : (body.crewBreakdown ?? []),
-      tierSubcontractors: body.tierSubcontractors ?? [],
-      tierSubsSummary: body.tierSubsSummary ?? '',
-      equipment: body.equipment ?? [],
-      notes: body.notes ?? '',
-      tradesAndFavors: body.tradesAndFavors ?? '',
+      submittedBy: sanitizeText(body.submittedBy, 120) || (isHp ? 'HP Staff' : 'Field Intake'),
+      locationDescription: sanitizeText(body.locationDescription, 4000),
+      workerCount: sanitizedWorkerCount,
+      totalHours: sanitizedTotalHours,
+      crewBreakdown: sanitizedCrew,
+      tierSubcontractors: sanitizeTierSubcontractors(body.tierSubcontractors),
+      tierSubsSummary: sanitizeText(body.tierSubsSummary, 1000),
+      equipment: sanitizeEquipment(body.equipment),
+      notes: sanitizeText(body.notes, 8000),
+      tradesAndFavors: sanitizeText(body.tradesAndFavors, 4000),
       isHpEmployee: isHp,
-      staCompleted: isHp ? true : (savedStaAttachments.length > 0 || body.staCompleted || false),
+      staCompleted: isHp ? true : (savedStaAttachments.length > 0 || Boolean(body.staCompleted)),
       staFiles: isHp ? undefined : (savedStaAttachments.length > 0 ? savedStaAttachments : undefined),
-      emailRecipients: body.emailRecipients ?? [],
+      emailRecipients: sanitizeEmails(body.emailRecipients),
       rawSourceFileName,
       rawSourcePath,
       rawSourceFiles: rawSourceFiles.length > 0 ? rawSourceFiles : undefined,

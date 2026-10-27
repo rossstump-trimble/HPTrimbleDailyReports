@@ -162,10 +162,12 @@ export function createProject(
   }
 
   const code = projectData.code?.trim().toUpperCase() || uniqueId.toUpperCase().slice(0, 8);
+  const intakeToken = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
   const newProject: Project = {
     id: uniqueId,
     code,
     name: projectData.name.trim(),
+    intakeToken,
     createdAt: new Date().toISOString(),
     workingDays: projectData.workingDays || [1, 2, 3, 4, 5],
     psPortfolioId: projectData.psPortfolioId || '8fddbe9f-933a-43b9-8b5e-17ff16f14598',

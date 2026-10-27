@@ -18,7 +18,7 @@ The initiative modernizes jobsite daily reporting, checklist inspections, and pu
 3. Giving Hensel Phelps superintendents and project engineers a consolidated review and approval workflow ("Superdaily").
 4. Synchronizing verified, superintendent-approved records directly into **Trimble ProjectSight** as the official System of Record.
 
-To satisfy Hensel Phelps enterprise data governance and privacy policies, all machine intelligence in this architecture is routed through the **Trimble AI (TAAI) Platform**, ensuring complete tenant data isolation, zero retention for model training, and adherence to enterprise compliance standards.
+To satisfy Hensel Phelps enterprise data governance and privacy policies, all machine intelligence in this architecture is routed through **Google Cloud Vertex AI (Enterprise ADC) / Trimble AI (TAAI)** under Trimble's enterprise cloud boundary, ensuring complete tenant data isolation, zero retention for model training, and adherence to enterprise compliance standards.
 
 ---
 
@@ -213,7 +213,7 @@ Trimble ProjectSight is the authoritative System of Record (SoR) for Hensel Phel
 ## 7. Frequently Asked Security & Privacy Questions (FAQ)
 
 **Q1: Does the AI model retain Hensel Phelps jobsite photos or voice recordings?**  
-*No.* All AI processing is routed through the Trimble AI (TAAI) Platform under an enterprise agreement. Image buffers and audio clips are processed ephemerally in volatile memory to generate structured JSON outputs and are immediately released.
+*No.* All AI processing is routed through Trimble's enterprise Google Cloud Vertex AI / TAAI boundary under an enterprise agreement. Image buffers and audio clips are processed ephemerally in volatile memory during extraction with zero model training. When a daily report is submitted for superintendent review, attachments are staged locally on the encrypted instance volume solely so they can be forwarded as official attachments to ProjectSight upon approval (and are purged when a report is deleted).
 
 **Q2: Can trade contractors access internal Hensel Phelps project information through the QR code?**  
 *No.* The QR code resolves to a scoped, public intake form. It does not provide access to the superintendent dashboard, project financials, scheduling models, or other subcontractors' submissions.

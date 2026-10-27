@@ -3,6 +3,7 @@ interface RateLimitRecord {
   resetAt: number;
 }
 
+const MAX_BUCKET_ENTRIES = 10000;
 const ipBuckets = new Map<string, RateLimitRecord>();
 
 // Cleanup stale rate limit buckets every 2 minutes
@@ -26,6 +27,20 @@ export function checkRateLimit(
   const record = ipBuckets.get(ip);
 
   if (!record || now > record.resetAt) {
+    if (ipBuckets.size >= MAX_BUCKET_ENTRIES && !ipBuckets.has(ip)) {
+      // Evict expired entries first, or the oldest key if still at capacity
+      ipBuckets.forEach((rec, key) => {
+        if (now > rec.resetAt) {
+          ipBuckets.delete(key);
+        }
+      });
+      if (ipBuckets.size >= MAX_BUCKET_ENTRIES) {
+        const firstKey = ipBuckets.keys().next().value;
+        if (firstKey !== undefined) {
+          ipBuckets.delete(firstKey);
+        }
+      }
+    }
     ipBuckets.set(ip, { count: 1, resetAt: now + windowMs });
     return { allowed: true, remaining: limit - 1, resetInSec: Math.ceil(windowMs / 1000) };
   }

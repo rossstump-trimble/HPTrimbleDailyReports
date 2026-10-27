@@ -12,7 +12,7 @@ import {
 import { listCompaniesWithContacts } from '@/lib/projectsight/client';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { SESSION_COOKIE } from '@/lib/local-session';
-import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
+import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import { slugTradePartnerId } from '@/lib/trade-partner';
 import type { TradePartner, ProjectCompany, CompanyContact } from '@/types/hpproto';
 
@@ -237,7 +237,8 @@ export async function POST(
     // Action 4: Sync or Preview Sync from connected ProjectSight project
     if (action === 'sync-connected' || action === 'preview-sync-connected') {
       const jar = cookies();
-      const token = tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
+      const tokenRes = await getValidTidAccessToken(jar.get(SESSION_COOKIE)?.value);
+      const token = tokenRes.token || tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
       const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
       const psPortfolioId = body.sourcePortfolioId || project.psPortfolioId || dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
       const psProjectId = body.sourceProjectId || project.psProjectId || dest.projectId || DEFAULT_DESTINATION.projectId;

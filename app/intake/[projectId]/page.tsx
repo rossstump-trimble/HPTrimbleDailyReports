@@ -494,10 +494,15 @@ export default function IntakePage() {
     setSubmitError(null);
     try {
       const body = new FormData();
+      const intakeToken =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("k") || undefined
+          : undefined;
       body.append(
         "daily",
         JSON.stringify({
           projectId,
+          intakeToken,
           ...formData,
           staCompleted: formData.staCompleted || staFiles.length > 0,
         }),

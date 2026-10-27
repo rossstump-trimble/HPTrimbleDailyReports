@@ -29,14 +29,15 @@ import {
 } from "@/lib/active-project";
 import type { Project } from "@/types/hpproto";
 
-function getIntakeUrl(projectId: string): string {
+function getIntakeUrl(projectId: string, intakeToken?: string): string {
+  const suffix = intakeToken ? `?k=${encodeURIComponent(intakeToken)}` : "";
   if (typeof window !== "undefined") {
     const origin = window.location.origin;
     if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
-      return `${origin}/intake/${projectId}`;
+      return `${origin}/intake/${projectId}${suffix}`;
     }
   }
-  return `https://hp-trimble-lab.com/intake/${projectId}`;
+  return `https://hp-trimble-lab.com/intake/${projectId}${suffix}`;
 }
 
 export default function ProjectsPage() {
@@ -196,7 +197,7 @@ export default function ProjectsPage() {
         {sortedProjects
           .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
           .map((project) => {
-          const intakeUrl = getIntakeUrl(project.id);
+          const intakeUrl = getIntakeUrl(project.id, project.intakeToken);
           const hpIntakeUrl = `${getIntakeUrl(project.id)}/hp`;
           const isDefault =
             defaultProjectId?.toLowerCase() === project.id.toLowerCase();

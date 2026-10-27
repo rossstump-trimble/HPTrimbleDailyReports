@@ -4,7 +4,7 @@ import { batchCommitPunchItems, getProjectById, getPunchItems } from '@/lib/stor
 import { createPunchItem, updatePunchItem } from '@/lib/projectsight/client';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { SESSION_COOKIE } from '@/lib/local-session';
-import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
+import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import type { PunchCommitActionItem } from '@/types/punch';
 
 export const runtime = 'nodejs';
@@ -26,7 +26,8 @@ export async function POST(req: Request, { params }: { params: { projectId: stri
 
     try {
       const jar = cookies();
-      token = tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
+      const tokenRes = await getValidTidAccessToken(jar.get(SESSION_COOKIE)?.value);
+      token = tokenRes.token || tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
       const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
       psPortfolioId = project?.psPortfolioId || dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
       psProjectId = project?.psProjectId || dest.projectId || DEFAULT_DESTINATION.projectId;

@@ -4,7 +4,7 @@ import { getPunchItems, upsertPunchItem } from '@/lib/store';
 import { listPunchItems, normalizePunchItem } from '@/lib/projectsight/client';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { SESSION_COOKIE } from '@/lib/local-session';
-import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
+import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import type { PunchItem } from '@/types/punch';
 
 export const runtime = 'nodejs';
@@ -18,7 +18,8 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
 
     try {
       const jar = cookies();
-      token = tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
+      const tokenRes = await getValidTidAccessToken(jar.get(SESSION_COOKIE)?.value);
+      token = tokenRes.token || tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
       const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
       psPortfolioId = dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
       psProjectId = dest.projectId || DEFAULT_DESTINATION.projectId;

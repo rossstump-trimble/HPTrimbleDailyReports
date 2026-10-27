@@ -3,7 +3,7 @@ import { getProjectById, getStore } from '@/lib/store';
 import { synthesizeSuperdaily } from '@/lib/superdaily';
 import { fetchWeatherForDate } from '@/lib/weather-service';
 import { cookies } from 'next/headers';
-import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
+import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import { SESSION_COOKIE } from '@/lib/local-session';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { listDailyReports, listProjectLocations } from '@/lib/projectsight/client';
@@ -61,7 +61,8 @@ export async function POST(req: Request, { params }: { params: { projectId: stri
     // Attempt live ProjectSight lookup if authenticated
     try {
       const jar = cookies();
-      const token = tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
+      const tokenRes = await getValidTidAccessToken(jar.get(SESSION_COOKIE)?.value);
+      const token = tokenRes.token || tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
       const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
       const psPortfolioId = project.psPortfolioId || dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
       const psProjectId = project.psProjectId || dest.projectId || DEFAULT_DESTINATION.projectId;

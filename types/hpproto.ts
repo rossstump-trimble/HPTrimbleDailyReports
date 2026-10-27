@@ -42,6 +42,8 @@ export interface Project {
   id: string;
   code: string;
   name: string;
+  intakeToken?: string;
+  requireIntakeToken?: boolean;
   tradePartners: TradePartner[];
   availableCompanies?: ProjectCompany[];
   createdAt: string;

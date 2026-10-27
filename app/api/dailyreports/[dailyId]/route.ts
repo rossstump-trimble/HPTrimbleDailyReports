@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { deleteDailyReport, getDailyReportById } from '@/lib/store';
+import { requireAuthResponse } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { dailyId: string } },
 ) {
+  const denied = requireAuthResponse(req);
+  if (denied) return denied;
+
   try {
     const { dailyId } = params;
     const report = getDailyReportById(dailyId);
@@ -21,9 +25,12 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: { dailyId: string } },
 ) {
+  const denied = requireAuthResponse(req);
+  if (denied) return denied;
+
   try {
     const { dailyId } = params;
     const deleted = deleteDailyReport(dailyId);

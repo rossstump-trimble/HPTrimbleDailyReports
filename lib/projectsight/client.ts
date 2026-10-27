@@ -155,7 +155,8 @@ export async function listProjects(
   accessToken: string,
   portfolioId: string,
 ): Promise<ProjectSightRef[]> {
-  const payload = await psFetch(`${projectSightBaseUrl()}/${portfolioId}/projects/list`, {
+  const safePort = safePsPathSegment(portfolioId);
+  const payload = await psFetch(`${projectSightBaseUrl()}/${safePort}/projects/list`, {
     method: 'POST',
     headers: projectSightHeaders(accessToken),
     body: JSON.stringify({}),
@@ -172,8 +173,10 @@ export async function listProjectLocations(
   projectId: string,
 ): Promise<ProjectSightRef[]> {
   try {
+    const safePort = safePsPathSegment(portfolioId);
+    const safeProj = safePsPathSegment(projectId);
     const payload = await psFetch(
-      `${projectSightBaseUrl()}/${portfolioId}/${projectId}/locations`,
+      `${projectSightBaseUrl()}/${safePort}/${safeProj}/locations`,
       {
         method: 'GET',
         headers: projectSightHeaders(accessToken),
@@ -197,8 +200,10 @@ export async function listDailyReports(
   portfolioId: string,
   projectId: string,
 ): Promise<Record<string, unknown>[]> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/dailyreports`,
     {
       method: 'GET',
       headers: projectSightHeaders(accessToken),
@@ -213,8 +218,11 @@ export async function getDailyReport(
   projectId: string,
   dailyId: string,
 ): Promise<Record<string, unknown>> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
+  const safeDaily = safePsPathSegment(dailyId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports/${dailyId}`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/dailyreports/${safeDaily}`,
     {
       method: 'GET',
       headers: projectSightHeaders(accessToken),
@@ -228,10 +236,12 @@ export async function listCompanies(
   portfolioId: string,
   projectId?: string,
 ): Promise<Record<string, unknown>[]> {
+  const safePort = safePsPathSegment(portfolioId);
   if (projectId) {
     try {
+      const safeProj = safePsPathSegment(projectId);
       const payload = await psFetch(
-        `${projectSightBaseUrl()}/${portfolioId}/${projectId}/Companies`,
+        `${projectSightBaseUrl()}/${safePort}/${safeProj}/Companies`,
         {
           method: 'GET',
           headers: projectSightHeaders(accessToken),
@@ -248,7 +258,7 @@ export async function listCompanies(
   // Response rows may include Contacts and Addresses arrays when the API returns them.
   try {
     const payload = await psFetch(
-      `${projectSightBaseUrl()}/${portfolioId}/Companies`,
+      `${projectSightBaseUrl()}/${safePort}/Companies`,
       {
         method: 'GET',
         headers: projectSightHeaders(accessToken),
@@ -297,10 +307,12 @@ export async function createProjectSightCompanyContact(
     addressId?: number;
   },
 ): Promise<Record<string, unknown>> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeComp = safePsPathSegment(companyId);
   let addressId = contact.addressId;
   if (addressId == null) {
     const companyPayload = await psFetch(
-      `${projectSightBaseUrl()}/${portfolioId}/Companies/${companyId}`,
+      `${projectSightBaseUrl()}/${safePort}/Companies/${safeComp}`,
       {
         method: 'GET',
         headers: projectSightHeaders(accessToken),
@@ -325,7 +337,7 @@ export async function createProjectSightCompanyContact(
   if (contact.title != null) contactRow.Title = contact.title;
   if (contact.phone != null) contactRow.Tel = contact.phone;
 
-  const payload = await psFetch(`${projectSightBaseUrl()}/${portfolioId}/Companies`, {
+  const payload = await psFetch(`${projectSightBaseUrl()}/${safePort}/Companies`, {
     method: 'POST',
     headers: projectSightHeaders(accessToken),
     body: JSON.stringify({
@@ -354,8 +366,10 @@ export async function listDrawings(
   portfolioId: string,
   projectId: string,
 ): Promise<Record<string, unknown>[]> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/drawings`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/drawings`,
     {
       method: 'GET',
       headers: projectSightHeaders(accessToken),
@@ -369,8 +383,10 @@ export async function listRfis(
   portfolioId: string,
   projectId: string,
 ): Promise<Record<string, unknown>[]> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/rfis`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/rfis`,
     {
       method: 'GET',
       headers: projectSightHeaders(accessToken),
@@ -384,8 +400,10 @@ export async function listSubmittals(
   portfolioId: string,
   projectId: string,
 ): Promise<Record<string, unknown>[]> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/submittals`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/submittals`,
     {
       method: 'GET',
       headers: projectSightHeaders(accessToken),
@@ -399,8 +417,10 @@ export async function listPunchItems(
   portfolioId: string,
   projectId: string,
 ): Promise<Record<string, unknown>[]> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/punchitems`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/punchitems`,
     {
       method: 'GET',
       headers: projectSightHeaders(accessToken),
@@ -462,8 +482,10 @@ export async function createPunchItem(
   projectId: string,
   body: Record<string, unknown>,
 ): Promise<{ id: string; payload: unknown }> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/punchitems`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/punchitems`,
     {
       method: 'POST',
       headers: projectSightHeaders(accessToken),
@@ -481,8 +503,11 @@ export async function updatePunchItem(
   punchItemId: string,
   body: Record<string, unknown>,
 ): Promise<{ id: string; payload: unknown }> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
+  const safePunch = safePsPathSegment(punchItemId);
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/punchitems/${punchItemId}`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/punchitems/${safePunch}`,
     {
       method: 'PUT',
       headers: projectSightHeaders(accessToken),
@@ -499,6 +524,8 @@ export async function createDailyReport(
   projectId: string,
   body: Record<string, unknown>,
 ): Promise<{ id: string; payload?: unknown }> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
   // Safety rule: strip any record identifiers so this function can only CREATE new Daily Reports
   const createPayload = { ...body };
   delete createPayload.DailyReportID;
@@ -530,7 +557,7 @@ export async function createDailyReport(
       .join('\n').length,
   });
   const payload = await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/dailyreports`,
     {
       method: 'POST',
       headers: projectSightHeaders(accessToken),
@@ -554,13 +581,16 @@ export async function attachDailyReportFile(
   bytes: Buffer,
   mimeType: string,
 ): Promise<void> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
+  const safeDaily = safePsPathSegment(dailyId);
   const form = new FormData();
   const blob = new Blob([new Uint8Array(bytes)], { type: mimeType || 'application/octet-stream' });
   form.append('file', blob, fileName);
   const headers = projectSightHeaders(accessToken);
   delete headers['Content-Type'];
   await psFetch(
-    `${projectSightBaseUrl()}/${portfolioId}/${projectId}/dailyreports/${dailyId}/attachments`,
+    `${projectSightBaseUrl()}/${safePort}/${safeProj}/dailyreports/${safeDaily}/attachments`,
     {
       method: 'POST',
       headers,
@@ -608,7 +638,9 @@ export async function listChecklists(
   projectId: string,
 ): Promise<ProjectSightChecklistRef[]> {
   try {
-    const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists`;
+    const safePort = safePsPathSegment(portfolioId);
+    const safeProj = safePsPathSegment(projectId);
+    const url = `${projectSightBaseUrl()}/${safePort}/${safeProj}/checklists`;
     const payload = await psFetch(url, {
       method: 'GET',
       headers: projectSightHeaders(accessToken),
@@ -673,7 +705,10 @@ export async function getChecklist(
   projectId: string,
   checklistId: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/${checklistId}`;
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
+  const safeCk = safePsPathSegment(checklistId);
+  const url = `${projectSightBaseUrl()}/${safePort}/${safeProj}/checklists/${safeCk}`;
   const payload = await psFetch(url, {
     method: 'GET',
     headers: projectSightHeaders(accessToken),
@@ -689,7 +724,9 @@ export async function updateChecklistItems(
   itemsList: { id?: string; itemNumber: number; prompt?: string; result: string; comment?: string }[],
   workflowState?: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists`;
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
+  const url = `${projectSightBaseUrl()}/${safePort}/${safeProj}/checklists`;
   const validItems = itemsList
     .filter((it) => it.id && !it.id.startsWith('item-'))
     .map((it) => {
@@ -747,13 +784,16 @@ export async function uploadChecklistAttachment(
   buffer: Buffer,
   contentType: string = 'image/jpeg',
 ): Promise<Record<string, unknown>> {
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
+  const safeCk = safePsPathSegment(checklistId);
   const form = new FormData();
   const blob = new Blob([new Uint8Array(buffer)], { type: contentType || 'application/octet-stream' });
   form.append('file', blob, filename);
   const headers = projectSightHeaders(accessToken);
   delete headers['Content-Type'];
 
-  const url = `${projectSightBaseUrl()}/${portfolioId}/${projectId}/checklists/${checklistId}/attachments`;
+  const url = `${projectSightBaseUrl()}/${safePort}/${safeProj}/checklists/${safeCk}/attachments`;
   const payload = await psFetch(url, {
     method: 'POST',
     headers,
