@@ -34,6 +34,15 @@ import {
 import { Label } from "@/components/ui/label";
 import type { ProjectCompany } from "@/types/hpproto";
 
+interface SyncCandidateCompany {
+  id: string;
+  psCompanyId?: number;
+  name: string;
+  trade: string;
+  contactsCount: number;
+  alreadyExists: boolean;
+}
+
 interface SyncPreviewData {
   remoteCount: number;
   addedCount: number;
@@ -41,6 +50,7 @@ interface SyncPreviewData {
   currentCount: number;
   totalAfterSync: number;
   sampleNames: string[];
+  candidates: SyncCandidateCompany[];
   message: string;
 }
 
@@ -63,6 +73,8 @@ export default function CompaniesPage() {
   // Sync Confirmation Dialog State
   const [syncPreview, setSyncPreview] = useState<SyncPreviewData | null>(null);
   const [trackImportedByDefault, setTrackImportedByDefault] = useState(true);
+  const [selectedImportIds, setSelectedImportIds] = useState<Set<string>>(new Set());
+  const [importFilterQuery, setImportFilterQuery] = useState("");
 
   // New Contact Dialog
   const [selectedCompanyForContact, setSelectedCompanyForContact] = useState<ProjectCompany | null>(null);
@@ -209,7 +221,15 @@ export default function CompaniesPage() {
         throw new Error(json.error || "Failed to check companies from ProjectSight");
       }
       const addedCount = Number(json.addedCount ?? 0);
+      const candidates: SyncCandidateCompany[] = Array.isArray(json.candidates) ? json.candidates : [];
       setTrackImportedByDefault(addedCount <= 50);
+      setImportFilterQuery("");
+      // For small lists (<= 50), pre-select all new candidates; for large portfolio dumps (> 50), start unselected so user can cherry-pick
+      if (candidates.length > 0 && addedCount <= 50) {
+        setSelectedImportIds(new Set(candidates.map((c) => c.id)));
+      } else {
+        setSelectedImportIds(new Set());
+      }
       setSyncPreview({
         remoteCount: Number(json.remoteCount ?? 0),
         addedCount,
@@ -217,6 +237,7 @@ export default function CompaniesPage() {
         currentCount: Number(json.currentCount ?? companies.length),
         totalAfterSync: Number(json.totalAfterSync ?? companies.length + addedCount),
         sampleNames: Array.isArray(json.sampleNames) ? json.sampleNames : [],
+        candidates,
         message: json.message || `Found ${json.remoteCount ?? 0} companies in ProjectSight.`,
       });
     } catch (err) {
@@ -240,6 +261,7 @@ export default function CompaniesPage() {
         body: JSON.stringify({
           action: "sync-connected",
           trackImported: trackImportedByDefault,
+          selectedCompanyIds: Array.from(selectedImportIds),
         }),
       });
       const json = await res.json();
@@ -726,83 +748,175 @@ export default function CompaniesPage() {
           if (!open) setSyncPreview(null);
         }}
       >
-        <DialogContent className="sm:max-w-[460px]">
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-tc-blue" />
-              Confirm ProjectSight Company Import
+              Select ProjectSight Companies to Import
             </DialogTitle>
             <DialogDescription>
-              Review the number of company records found in ProjectSight before importing them into this project.
+              Search and select only the specific trade companies you want to import into this project, or select all.
             </DialogDescription>
           </DialogHeader>
 
-          {syncPreview && (
-            <div className="space-y-4 py-2 text-xs">
-              <div className="grid grid-cols-3 gap-2 text-center bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <div>
-                  <span className="text-[10px] uppercase font-semibold text-slate-500 block">Found in PS</span>
-                  <span className="text-lg font-bold text-slate-900">{syncPreview.remoteCount}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-semibold text-slate-500 block">New to Add</span>
-                  <span className="text-lg font-bold text-tc-blue">+{syncPreview.addedCount}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-semibold text-slate-500 block">Total After</span>
-                  <span className="text-lg font-bold text-slate-900">{syncPreview.totalAfterSync}</span>
-                </div>
-              </div>
+          {syncPreview && (() => {
+            const q = importFilterQuery.trim().toLowerCase();
+            const filteredCandidates = syncPreview.candidates.filter(
+              (c) =>
+                !q ||
+                c.name.toLowerCase().includes(q) ||
+                c.trade.toLowerCase().includes(q) ||
+                (c.psCompanyId != null && String(c.psCompanyId).includes(q)),
+            );
 
-              {syncPreview.addedCount > 50 && (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            return (
+              <div className="space-y-3.5 py-1 text-xs">
+                <div className="grid grid-cols-3 gap-2 text-center bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <div>
-                    <p className="font-semibold">Large Portfolio Company Directory ({syncPreview.addedCount} records)</p>
-                    <p className="mt-0.5 text-[11px] text-amber-800">
-                      This import contains a large number of portfolio companies. We recommend importing them as untracked and enabling only the specific trade partners active on your bowling sheet.
-                    </p>
+                    <span className="text-[10px] uppercase font-semibold text-slate-500 block">Found in PS</span>
+                    <span className="text-base font-bold text-slate-900">{syncPreview.remoteCount}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-semibold text-slate-500 block">Selected</span>
+                    <span className="text-base font-bold text-tc-blue">{selectedImportIds.size}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-semibold text-slate-500 block">Currently in App</span>
+                    <span className="text-base font-bold text-slate-900">{syncPreview.currentCount}</span>
                   </div>
                 </div>
-              )}
 
-              {syncPreview.sampleNames.length > 0 && (
-                <div className="space-y-1">
-                  <span className="text-[11px] font-semibold text-slate-600 block">Sample Companies:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {syncPreview.sampleNames.map((name, idx) => (
-                      <Badge key={idx} variant="secondary" className="text-[11px] font-normal">
-                        {name}
-                      </Badge>
-                    ))}
-                    {syncPreview.remoteCount > syncPreview.sampleNames.length && (
-                      <Badge variant="outline" className="text-[11px] text-slate-500">
-                        +{syncPreview.remoteCount - syncPreview.sampleNames.length} more
-                      </Badge>
+                {syncPreview.remoteCount > 50 && (
+                  <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-[11px] leading-snug">
+                      <span className="font-semibold">Portfolio Directory Detected ({syncPreview.remoteCount} companies):</span>{" "}
+                      To avoid importing the entire portfolio, we started with <strong>0 selected</strong>. Search below and check only the trade partners active on your jobsite.
+                    </div>
+                  </div>
+                )}
+
+                {/* Search & Select All / None Toolbar */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                      <Input
+                        type="search"
+                        value={importFilterQuery}
+                        onChange={(e) => setImportFilterQuery(e.target.value)}
+                        placeholder="Search ProjectSight companies by name or trade…"
+                        className="pl-8 h-8 text-xs"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs shrink-0"
+                      onClick={() => {
+                        setSelectedImportIds((prev) => {
+                          const next = new Set(prev);
+                          for (const c of filteredCandidates) next.add(c.id);
+                          return next;
+                        });
+                      }}
+                    >
+                      Select {q ? `Matching (${filteredCandidates.length})` : "All"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs shrink-0"
+                      onClick={() => setSelectedImportIds(new Set())}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+
+                  {/* Scrollable Checklist */}
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+                    {filteredCandidates.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400 italic">
+                        No ProjectSight companies match &ldquo;{importFilterQuery}&rdquo;.
+                      </div>
+                    ) : (
+                      filteredCandidates.slice(0, 150).map((cand) => {
+                        const checked = selectedImportIds.has(cand.id);
+                        return (
+                          <label
+                            key={cand.id}
+                            className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  setSelectedImportIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (isChecked) next.add(cand.id);
+                                    else next.delete(cand.id);
+                                    return next;
+                                  });
+                                }}
+                                className="rounded border-slate-300"
+                              />
+                              <div className="min-w-0">
+                                <span className="font-semibold text-slate-800 block truncate">
+                                  {cand.name}
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {cand.trade} · {cand.contactsCount} contact(s)
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {cand.psCompanyId && (
+                                <Badge variant="outline" className="text-[10px] py-0 h-4 text-slate-500">
+                                  PS #{cand.psCompanyId}
+                                </Badge>
+                              )}
+                              {cand.alreadyExists && (
+                                <Badge variant="secondary" className="text-[10px] py-0 h-4">
+                                  In App
+                                </Badge>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })
+                    )}
+                    {filteredCandidates.length > 150 && (
+                      <div className="p-2 text-center text-[11px] text-slate-500 bg-slate-50">
+                        Showing first 150 of {filteredCandidates.length} matches — use the search box above to narrow further.
+                      </div>
                     )}
                   </div>
                 </div>
-              )}
 
-              <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
-                <div className="pr-3">
-                  <Label htmlFor="track-imported-switch" className="text-xs font-semibold text-slate-800 block cursor-pointer">
-                    Automatically track all imported companies on Bowling Sheet
-                  </Label>
-                  <span className="text-[11px] text-slate-500">
-                    {trackImportedByDefault
-                      ? `All ${syncPreview.addedCount} new companies will appear as rows on the Bowling Sheet`
-                      : "Companies will be saved to directory so you can toggle on only active trades"}
-                  </span>
+                <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
+                  <div className="pr-3">
+                    <Label htmlFor="track-imported-switch" className="text-xs font-semibold text-slate-800 block cursor-pointer">
+                      Track selected companies on Bowling Sheet immediately
+                    </Label>
+                    <span className="text-[11px] text-slate-500">
+                      {trackImportedByDefault
+                        ? `Selected companies (${selectedImportIds.size}) will appear as active rows on the Bowling Sheet`
+                        : "Selected companies will be saved to directory as untracked until toggled on"}
+                    </span>
+                  </div>
+                  <Switch
+                    id="track-imported-switch"
+                    checked={trackImportedByDefault}
+                    onCheckedChange={setTrackImportedByDefault}
+                  />
                 </div>
-                <Switch
-                  id="track-imported-switch"
-                  checked={trackImportedByDefault}
-                  onCheckedChange={setTrackImportedByDefault}
-                />
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <DialogFooter>
             <Button
@@ -816,12 +930,12 @@ export default function CompaniesPage() {
             <Button
               type="button"
               onClick={handleConfirmSyncConnected}
-              disabled={syncing}
+              disabled={syncing || selectedImportIds.size === 0}
               className="bg-tc-blue hover:bg-blue-700 text-white"
             >
               {syncing
                 ? "Importing..."
-                : `Confirm & Import ${syncPreview?.addedCount ?? 0} Companies`}
+                : `Import ${selectedImportIds.size} Selected ${selectedImportIds.size === 1 ? "Company" : "Companies"}`}
             </Button>
           </DialogFooter>
         </DialogContent>

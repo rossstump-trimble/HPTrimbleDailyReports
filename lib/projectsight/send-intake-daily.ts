@@ -1,13 +1,36 @@
 import type { DailyReport } from '@/types/hpproto';
 import type { ProjectSightDestination } from '@/lib/projectsight/destination';
 import { ProjectSightHttpError } from '@/lib/projectsight/client';
-import { markDailySentToProjectSight } from '@/lib/store';
+import { getProjectCompanies, markDailySentToProjectSight } from '@/lib/store';
 import { sendFog617ToProjectSight, type SendDailyResult, type SendDailyAttachment } from '@/lib/projectsight/send-daily';
 import type { Fog617Capture } from '@/lib/projectsight/map-daily';
+import { slugTradePartnerId } from '@/lib/trade-partner';
 
 export function captureFromDailyReport(report: DailyReport): Fog617Capture {
+  let psCompanyId: number | undefined;
+  try {
+    if (report.projectId) {
+      const companies = getProjectCompanies(report.projectId);
+      const rId = (report.tradePartnerId || '').toLowerCase();
+      const rName = (report.tradePartnerName || '').trim().toLowerCase();
+      const rSlug = slugTradePartnerId(rName);
+      const matched = companies.find(
+        (c) =>
+          c.id.toLowerCase() === rId ||
+          c.name.trim().toLowerCase() === rName ||
+          slugTradePartnerId(c.name) === rSlug,
+      );
+      if (matched?.psCompanyId != null) {
+        psCompanyId = matched.psCompanyId;
+      }
+    }
+  } catch {
+    // ignore store read issues in isolated unit tests
+  }
+
   return {
     tradePartnerName: report.tradePartnerName,
+    psCompanyId,
     submittedBy: report.submittedBy,
     date: report.date,
     locationDescription: report.locationDescription,

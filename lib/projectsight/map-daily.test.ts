@@ -92,4 +92,29 @@ describe('mapFog617ToProjectSightBody', () => {
     expect(works[1].HoursPerDay).toBe(10);
     expect(works[1].TotalWork).toBe(20);
   });
+
+  it('includes CompanyID on DailyWorks when psCompanyId is provided and omits it for manual companies', () => {
+    const syncedCapture: Fog617Capture = {
+      tradePartnerName: 'Custom Synced Sub',
+      psCompanyId: 4412,
+      date: '2026-10-27',
+      workerCount: 5,
+      totalHours: 40,
+    };
+    const syncedBody = mapFog617ToProjectSightBody(syncedCapture);
+    const syncedWorks = syncedBody.DailyWorks as Record<string, unknown>[];
+    expect(syncedWorks[0].CompanyID).toBe(4412);
+    expect(syncedWorks[0].CompanyName).toBe('Custom Synced Sub');
+
+    const manualCapture: Fog617Capture = {
+      tradePartnerName: 'Brand New Manual Sub',
+      date: '2026-10-27',
+      workerCount: 5,
+      totalHours: 40,
+    };
+    const manualBody = mapFog617ToProjectSightBody(manualCapture);
+    const manualWorks = manualBody.DailyWorks as Record<string, unknown>[];
+    expect(manualWorks[0].CompanyID).toBeUndefined();
+    expect(manualWorks[0].CompanyName).toBe('Brand New Manual Sub');
+  });
 });

@@ -90,7 +90,17 @@ export default function BowlingPage() {
     totalAfterSync: number;
     customSourceId?: string;
     trackImported: boolean;
+    candidates: Array<{
+      id: string;
+      psCompanyId?: number;
+      name: string;
+      trade: string;
+      contactsCount: number;
+      alreadyExists: boolean;
+    }>;
   } | null>(null);
+  const [selectedImportIds, setSelectedImportIds] = useState<Set<string>>(new Set());
+  const [importFilterQuery, setImportFilterQuery] = useState("");
   const [activeCompanyPage, setActiveCompanyPage] = useState(1);
   const ACTIVE_COMPANY_PAGE_SIZE = 20;
 
@@ -160,6 +170,7 @@ export default function BowlingPage() {
         action: string;
         sourceProjectId?: string;
         trackImported?: boolean;
+        selectedCompanyIds?: string[];
       } = {
         action: confirmed ? "sync-connected" : "preview-sync-connected",
       };
@@ -168,6 +179,7 @@ export default function BowlingPage() {
       }
       if (confirmed && pendingSyncPreview) {
         payload.trackImported = pendingSyncPreview.trackImported;
+        payload.selectedCompanyIds = Array.from(selectedImportIds);
       }
 
       const res = await fetch(`/api/projects/${projectId}/companies`, {
@@ -194,12 +206,20 @@ export default function BowlingPage() {
 
       if (!confirmed && body.preview) {
         const addedCount = Number(body.addedCount ?? 0);
+        const candidates = Array.isArray(body.candidates) ? body.candidates : [];
+        setImportFilterQuery("");
+        if (candidates.length > 0 && addedCount <= 50) {
+          setSelectedImportIds(new Set(candidates.map((c: { id: string }) => c.id)));
+        } else {
+          setSelectedImportIds(new Set());
+        }
         setPendingSyncPreview({
           remoteCount: Number(body.remoteCount ?? 0),
           addedCount,
           totalAfterSync: Number(body.totalAfterSync ?? 0),
           customSourceId: customSourceId?.trim() || undefined,
-          trackImported: addedCount <= 50,
+          trackImported: true,
+          candidates,
         });
         return;
       }
@@ -528,7 +548,7 @@ export default function BowlingPage() {
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-foreground">
                   Daily Report Compliance ·{" "}
-                  {new Date(data.month + "-01").toLocaleDateString("en-US", {
+                  {new Date(`${data.month}-01T12:00:00`).toLocaleDateString("en-US", {
                     month: "long",
                     year: "numeric",
                   })}
@@ -739,57 +759,131 @@ export default function BowlingPage() {
               )}
             </div>
 
-            {pendingSyncPreview && (
-              <div className="border border-amber-300 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 rounded-lg p-3 space-y-2.5 text-xs">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1 flex-1">
-                    <p className="font-semibold text-amber-950 dark:text-amber-200">
-                      Confirm Company Import: {pendingSyncPreview.addedCount} new record(s) found
-                    </p>
-                    <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                      ProjectSight returned {pendingSyncPreview.remoteCount} companies ({pendingSyncPreview.totalAfterSync} total after sync).
-                    </p>
+            {pendingSyncPreview && (() => {
+              const q = importFilterQuery.trim().toLowerCase();
+              const filteredCands = pendingSyncPreview.candidates.filter(
+                (c) =>
+                  !q ||
+                  c.name.toLowerCase().includes(q) ||
+                  c.trade.toLowerCase().includes(q),
+              );
+              return (
+                <div className="border border-amber-300 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 rounded-lg p-3 space-y-2.5 text-xs">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5 flex-1">
+                      <p className="font-semibold text-amber-950 dark:text-amber-200">
+                        Select Companies to Import ({selectedImportIds.size} of {pendingSyncPreview.remoteCount} selected)
+                      </p>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                        {pendingSyncPreview.remoteCount > 50
+                          ? "Large portfolio directory detected — search and check only the companies active on this project."
+                          : "Check the companies you want to add to this project."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="search"
+                      value={importFilterQuery}
+                      onChange={(e) => setImportFilterQuery(e.target.value)}
+                      placeholder="Search ProjectSight companies…"
+                      className="h-7 text-xs bg-background flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() => {
+                        setSelectedImportIds((prev) => {
+                          const next = new Set(prev);
+                          for (const c of filteredCands) next.add(c.id);
+                          return next;
+                        });
+                      }}
+                    >
+                      Select {q ? `(${filteredCands.length})` : "All"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() => setSelectedImportIds(new Set())}
+                    >
+                      None
+                    </Button>
+                  </div>
+
+                  <div className="max-h-40 overflow-y-auto divide-y divide-border/60 rounded border border-border bg-background">
+                    {filteredCands.slice(0, 100).map((cand) => (
+                      <label
+                        key={cand.id}
+                        className="flex items-center justify-between gap-2 px-2.5 py-1.5 hover:bg-muted/40 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedImportIds.has(cand.id)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setSelectedImportIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked) next.add(cand.id);
+                                else next.delete(cand.id);
+                                return next;
+                              });
+                            }}
+                            className="rounded"
+                          />
+                          <span className="font-medium text-foreground truncate">{cand.name}</span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{cand.trade}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <label className="flex items-center gap-2 text-[11px] font-medium text-amber-950 dark:text-amber-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pendingSyncPreview.trackImported}
+                      onChange={(e) =>
+                        setPendingSyncPreview((prev) =>
+                          prev ? { ...prev, trackImported: e.target.checked } : null,
+                        )
+                      }
+                      className="rounded border-amber-400"
+                    />
+                    <span>Track selected companies on Bowling Sheet rows immediately</span>
+                  </label>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={syncingCompanies}
+                      onClick={() => setPendingSyncPreview(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 text-xs bg-[#0063a3] hover:bg-[#005187] text-white"
+                      disabled={syncingCompanies || selectedImportIds.size === 0}
+                      onClick={() => handleSyncConnectedCompanies(pendingSyncPreview.customSourceId, true)}
+                    >
+                      {syncingCompanies
+                        ? "Importing..."
+                        : `Import ${selectedImportIds.size} Selected`}
+                    </Button>
                   </div>
                 </div>
-                <label className="flex items-center gap-2 text-[11px] font-medium text-amber-950 dark:text-amber-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={pendingSyncPreview.trackImported}
-                    onChange={(e) =>
-                      setPendingSyncPreview((prev) =>
-                        prev ? { ...prev, trackImported: e.target.checked } : null,
-                      )
-                    }
-                    className="rounded border-amber-400"
-                  />
-                  <span>Add all {pendingSyncPreview.addedCount} imported companies directly to Bowling Sheet rows</span>
-                </label>
-                <div className="flex justify-end gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={syncingCompanies}
-                    onClick={() => setPendingSyncPreview(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 text-xs bg-[#0063a3] hover:bg-[#005187] text-white"
-                    disabled={syncingCompanies}
-                    onClick={() => handleSyncConnectedCompanies(pendingSyncPreview.customSourceId, true)}
-                  >
-                    {syncingCompanies
-                      ? "Importing..."
-                      : `Confirm Import (${pendingSyncPreview.addedCount})`}
-                  </Button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Action 1: Load from Connected Project */}
             <div className="border border-border rounded-lg p-3 bg-muted/20 space-y-2">

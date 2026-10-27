@@ -1,7 +1,9 @@
+import { lookupCompany } from './ps-lookups';
 import type { TierSubcontractor } from '@/types/hpproto';
 
 export interface Fog617Capture {
   tradePartnerName?: string;
+  psCompanyId?: number;
   submittedBy?: string;
   date?: string;
   locationDescription?: string;
@@ -84,6 +86,8 @@ export function mapFog617ToProjectSightBody(
   }, 0);
 
   const isHp = Boolean(capture.isHpEmployee);
+  const resolvedCompanyId =
+    capture.psCompanyId ?? lookupCompany(trade)?.id;
   const workerCount = isHp
     ? (capture.workerCount ?? 0)
     : (capture.workerCount ?? (calculatedWorkerCount || 1));
@@ -101,7 +105,7 @@ export function mapFog617ToProjectSightBody(
       const cCount = Number(r.count) || 0;
       const cHpp = Number(r.hoursPerWorker) || 8.0;
       const cTotal = Number(r.totalHours) || cCount * cHpp;
-      dailyWorksItems.push({
+      const item: Record<string, unknown> = {
         CompanyName: trade || 'Trade Partner',
         Company: trade || 'Trade Partner',
         Trade: r.craft || trade || 'Trade Partner',
@@ -120,10 +124,14 @@ export function mapFog617ToProjectSightBody(
         Location: effectiveLocation,
         LocationDescription: effectiveLocation,
         Notes: notes || '',
-      });
+      };
+      if (resolvedCompanyId != null) {
+        item.CompanyID = resolvedCompanyId;
+      }
+      dailyWorksItems.push(item);
     }
   } else {
-    dailyWorksItems.push({
+    const item: Record<string, unknown> = {
       CompanyName: trade || (isHp ? 'Hensel Phelps' : 'Trade Partner'),
       Company: trade || (isHp ? 'Hensel Phelps' : 'Trade Partner'),
       Trade: isHp ? 'General Contractor Supervision' : (trade || 'Trade Partner'),
@@ -142,7 +150,11 @@ export function mapFog617ToProjectSightBody(
       Location: effectiveLocation,
       LocationDescription: effectiveLocation,
       Notes: notes || '',
-    });
+    };
+    if (resolvedCompanyId != null) {
+      item.CompanyID = resolvedCompanyId;
+    }
+    dailyWorksItems.push(item);
   }
 
   const payload: Record<string, unknown> = {

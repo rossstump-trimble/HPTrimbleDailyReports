@@ -112,6 +112,7 @@ export async function POST(
       purgeReports?: boolean;
       isTracked?: boolean;
       trackImported?: boolean;
+      selectedCompanyIds?: string[];
     };
 
     const action = body.action || 'sync-connected';
@@ -270,7 +271,18 @@ export async function POST(
       let addedCount = 0;
       let existingMatchCount = 0;
       const updatedList: ProjectCompany[] = [];
+      const candidateCompanies: Array<{
+        id: string;
+        psCompanyId?: number;
+        name: string;
+        trade: string;
+        contactsCount: number;
+        alreadyExists: boolean;
+      }> = [];
       const seenIncomingIds = new Set<string>();
+      const selectedFilterSet = Array.isArray(body.selectedCompanyIds)
+        ? new Set(body.selectedCompanyIds.map((id) => String(id).trim().toLowerCase()).filter(Boolean))
+        : null;
 
       for (const raw of rawCompanies) {
         const compName = String(
@@ -306,6 +318,26 @@ export async function POST(
           .filter(Boolean) as CompanyContact[];
 
         const existing = existingMap.get(compId.toLowerCase()) || nameMap.get(compName.toLowerCase());
+        candidateCompanies.push({
+          id: compId,
+          psCompanyId: psCompId,
+          name: compName,
+          trade: cat || 'Trade Partner',
+          contactsCount: contacts.length,
+          alreadyExists: Boolean(existing),
+        });
+
+        // If user provided an explicit selection list, skip importing companies not in that list
+        const isSelected =
+          !selectedFilterSet ||
+          selectedFilterSet.has(compId.toLowerCase()) ||
+          selectedFilterSet.has(compName.toLowerCase()) ||
+          (psCompId != null && selectedFilterSet.has(String(psCompId)));
+
+        if (!isSelected) {
+          continue;
+        }
+
         if (existing) {
           existingMatchCount++;
           const mergedContacts = [...existing.contacts];
@@ -364,6 +396,7 @@ export async function POST(
           currentCount: currentCompanies.length,
           totalAfterSync: updatedList.length,
           sampleNames: updatedList.slice(0, 8).map((c) => c.name),
+          candidates: candidateCompanies,
           message: `Found ${seenIncomingIds.size} company record(s) in ProjectSight (${addedCount} new to add, ${existingMatchCount} already in project).`,
         });
       }
