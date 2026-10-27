@@ -48,6 +48,9 @@ export function resolveAuthMode(opts: {
     case "tid":
       return "tid";
     case "unset": {
+      if (process.env.NODE_ENV === "production") {
+        return "tid";
+      }
       return isLoopbackHost(opts.hostHeader ?? "") ? "local" : "tid";
     }
     default: {

@@ -8,11 +8,18 @@ import { checkRateLimit } from "@/lib/rate-limiter";
 import { isPublicIntakePath } from "@/lib/middleware-auth";
 
 function getClientIp(request: NextRequest): string {
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) {
+    return realIp.trim();
+  }
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0].trim();
+    const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return parts[parts.length - 1];
+    }
   }
-  return request.headers.get("x-real-ip") || "127.0.0.1";
+  return "127.0.0.1";
 }
 
 function isPublicPath(pathname: string, method: string): boolean {
@@ -33,7 +40,7 @@ export function middleware(request: NextRequest) {
   const clientIp = getClientIp(request);
 
   // 1. DDoS & Rate Limiting protection
-  const rateLimit = pathname.startsWith("/api/auth") || pathname === "/login"
+  const rateLimit = pathname.startsWith("/api/auth") || pathname.startsWith("/api/login") || pathname === "/login"
     ? checkRateLimit(`auth:${clientIp}`, 30, 60000)
     : pathname.startsWith("/api/intake") || pathname.startsWith("/api/dailyreports")
       ? checkRateLimit(`intake:${clientIp}`, 60, 60000)
@@ -107,7 +114,11 @@ function applySecurityHeaders(response: NextResponse) {
     "Strict-Transport-Security",
     "max-age=31536000; includeSubDomains; preload"
   );
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
+  response.headers.set("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()");
+  response.headers.set(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https:; frame-ancestors 'self'; base-uri 'self'; object-src 'none'",
+  );
 }
 
 export const config = {

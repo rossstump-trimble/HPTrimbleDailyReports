@@ -1,4 +1,4 @@
-import { fetchClientCredentialsToken, refreshTIDTokens } from '@/lib/tid-auth';
+import { refreshTIDTokens } from '@/lib/tid-auth';
 
 const LOCAL_PLACEHOLDER_ACCESS_TOKEN = 'local-dev-no-tid';
 
@@ -13,6 +13,8 @@ export interface SessionCookiePayload {
   access_token?: string;
   refresh_token?: string;
   expires_at?: number;
+  isAdmin?: boolean;
+  sig?: string;
 }
 
 export function tidAccessTokenFromCookie(raw: string | undefined): string | null {
@@ -22,6 +24,7 @@ export function tidAccessTokenFromCookie(raw: string | undefined): string | null
     const token = typeof parsed.access_token === 'string' ? parsed.access_token : '';
     if (!token) return null;
     if (token === LOCAL_PLACEHOLDER_ACCESS_TOKEN) return null;
+    if (parsed.expires_at && Date.now() >= parsed.expires_at) return null;
     return token;
   } catch {
     return null;
@@ -32,12 +35,7 @@ export async function getValidTidAccessToken(
   raw: string | undefined,
 ): Promise<{ token: string | null; refreshedSession?: SessionCookiePayload }> {
   if (!raw) {
-    try {
-      const ccToken = await fetchClientCredentialsToken();
-      return { token: ccToken };
-    } catch {
-      return { token: null };
-    }
+    return { token: null };
   }
 
   try {
@@ -64,16 +62,12 @@ export async function getValidTidAccessToken(
         };
         return { token: tokens.access_token, refreshedSession: updated };
       } catch (err) {
-        console.error('[TID refresh error, falling back to client credentials]', err);
+        console.error('[TID refresh error]', err);
+        return { token: null };
       }
     }
 
-    try {
-      const ccToken = await fetchClientCredentialsToken();
-      return { token: ccToken };
-    } catch {
-      return { token: parsed.access_token || null };
-    }
+    return { token: isExpired ? null : (parsed.access_token || null) };
   } catch {
     return { token: null };
   }

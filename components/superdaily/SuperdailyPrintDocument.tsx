@@ -5,17 +5,41 @@ interface SuperdailyPrintDocumentProps {
   report: SuperdailyReport;
   hiddenSectionKeys?: string[];
   hiddenTradeIds?: string[];
+  splitByLocation?: boolean;
+  locationFilter?: string;
 }
 
 export function SuperdailyPrintDocument({
   report,
   hiddenSectionKeys = [],
   hiddenTradeIds = [],
+  splitByLocation = false,
+  locationFilter = 'all',
 }: SuperdailyPrintDocumentProps) {
   const isHidden = (key: string) => hiddenSectionKeys.includes(key);
-  const visibleTrades = report.tradeSummaries.filter(
-    (t) => !hiddenTradeIds.includes(t.tradePartnerId),
-  );
+  const visibleTrades = report.tradeSummaries
+    .filter((t) => !hiddenTradeIds.includes(t.tradePartnerId))
+    .filter((t) => {
+      if (!locationFilter || locationFilter === 'all') return true;
+      const loc = (t.locationDescription || 'Site General').trim().toLowerCase();
+      return loc === locationFilter.trim().toLowerCase();
+    });
+
+  const locationGroups = (() => {
+    const map = new Map<string, typeof visibleTrades>();
+    for (const trade of visibleTrades) {
+      const loc = (trade.locationDescription || 'Site General').trim() || 'Site General';
+      const existing = map.get(loc) ?? [];
+      existing.push(trade);
+      map.set(loc, existing);
+    }
+    return Array.from(map.entries()).map(([location, trades]) => ({
+      location,
+      trades,
+      workers: trades.reduce((sum, t) => sum + (t.workerCount || 0), 0),
+      hours: trades.reduce((sum, t) => sum + (t.totalHours || 0), 0),
+    }));
+  })();
 
   return (
     <div
@@ -142,45 +166,101 @@ export function SuperdailyPrintDocument({
           <h2 className="text-xs font-bold uppercase tracking-wider text-[#333333] border-l-[3px] border-[#A6192E] pl-2 pb-0.5 mb-2">
             Trade Contractor Work & Field Activities
           </h2>
-          <div className="space-y-2.5 pl-0.5">
-            {visibleTrades.map((trade, idx) => (
-              <div
-                key={idx}
-                className="border border-[#D0D3D4] rounded p-2.5 bg-white break-inside-avoid"
-              >
-                <div className="flex items-center justify-between border-b border-[#D0D3D4] pb-1.5 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[#333333] text-xs">{trade.tradePartnerName}</span>
-                    {trade.category && (
-                      <span className="px-1.5 py-0.5 rounded bg-[#D0D3D4]/40 text-[#333333] text-[9px] font-semibold">
-                        {trade.category}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 text-[10px] text-slate-600 font-medium">
-                    <span>Crew: <strong className="text-[#333333]">{trade.workerCount}</strong></span>
-                    <span>Hours: <strong className="text-[#333333]">{trade.totalHours}</strong></span>
-                    <span>
-                      STA: {trade.staCompleted ? <strong className="text-emerald-700 font-bold">✓ Complete</strong> : <strong className="text-[#A6192E] font-bold">✗ Incomplete</strong>}
+          {splitByLocation ? (
+            <div className="space-y-4 pl-0.5">
+              {locationGroups.map((group) => (
+                <div key={group.location} className="space-y-2 break-inside-avoid">
+                  <div className="flex items-center justify-between bg-[#FAFAFA] border border-[#D0D3D4] px-2.5 py-1.5 rounded">
+                    <span className="font-bold text-[#A6192E] text-[11px] uppercase tracking-wide">
+                      Location: {group.location}
+                    </span>
+                    <span className="text-[10px] text-slate-600 font-semibold">
+                      {group.trades.length} trade(s) · {group.workers} workers · {group.hours} hrs
                     </span>
                   </div>
-                </div>
+                  <div className="space-y-2 pl-2 border-l-2 border-[#D0D3D4]">
+                    {group.trades.map((trade, idx) => (
+                      <div
+                        key={idx}
+                        className="border border-[#D0D3D4] rounded p-2.5 bg-white break-inside-avoid"
+                      >
+                        <div className="flex items-center justify-between border-b border-[#D0D3D4] pb-1.5 mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[#333333] text-xs">{trade.tradePartnerName}</span>
+                            {trade.category && (
+                              <span className="px-1.5 py-0.5 rounded bg-[#D0D3D4]/40 text-[#333333] text-[9px] font-semibold">
+                                {trade.category}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-slate-600 font-medium">
+                            <span>Crew: <strong className="text-[#333333]">{trade.workerCount}</strong></span>
+                            <span>Hours: <strong className="text-[#333333]">{trade.totalHours}</strong></span>
+                            <span>
+                              STA: {trade.staCompleted ? <strong className="text-emerald-700 font-bold">✓ Complete</strong> : <strong className="text-[#A6192E] font-bold">✗ Incomplete</strong>}
+                            </span>
+                          </div>
+                        </div>
 
-                <div className="text-[10px] text-[#333333] mb-1.5">
-                  <span className="font-semibold text-[#333333] mr-1">Location & Activities:</span>
-                  <span className="text-slate-600 mr-2">[{trade.locationDescription}]</span>
-                  <span className="leading-relaxed whitespace-pre-wrap">{trade.workPerformed}</span>
-                </div>
+                        <div className="text-[10px] text-[#333333] mb-1.5">
+                          <span className="font-semibold text-[#333333] mr-1">Location & Activities:</span>
+                          <span className="text-slate-600 mr-2">[{trade.locationDescription}]</span>
+                          <span className="leading-relaxed whitespace-pre-wrap">{trade.workPerformed}</span>
+                        </div>
 
-                {trade.equipment.length > 0 && (
-                  <div className="text-[9px] text-slate-500 flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-600">Equipment in Use:</span>
-                    <span>{trade.equipment.join(', ')}</span>
+                        {trade.equipment.length > 0 && (
+                          <div className="text-[9px] text-slate-500 flex items-center gap-1.5">
+                            <span className="font-semibold text-slate-600">Equipment in Use:</span>
+                            <span>{trade.equipment.join(', ')}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2.5 pl-0.5">
+              {visibleTrades.map((trade, idx) => (
+                <div
+                  key={idx}
+                  className="border border-[#D0D3D4] rounded p-2.5 bg-white break-inside-avoid"
+                >
+                  <div className="flex items-center justify-between border-b border-[#D0D3D4] pb-1.5 mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[#333333] text-xs">{trade.tradePartnerName}</span>
+                      {trade.category && (
+                        <span className="px-1.5 py-0.5 rounded bg-[#D0D3D4]/40 text-[#333333] text-[9px] font-semibold">
+                          {trade.category}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-slate-600 font-medium">
+                      <span>Crew: <strong className="text-[#333333]">{trade.workerCount}</strong></span>
+                      <span>Hours: <strong className="text-[#333333]">{trade.totalHours}</strong></span>
+                      <span>
+                        STA: {trade.staCompleted ? <strong className="text-emerald-700 font-bold">✓ Complete</strong> : <strong className="text-[#A6192E] font-bold">✗ Incomplete</strong>}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-[#333333] mb-1.5">
+                    <span className="font-semibold text-[#333333] mr-1">Location & Activities:</span>
+                    <span className="text-slate-600 mr-2">[{trade.locationDescription}]</span>
+                    <span className="leading-relaxed whitespace-pre-wrap">{trade.workPerformed}</span>
+                  </div>
+
+                  {trade.equipment.length > 0 && (
+                    <div className="text-[9px] text-slate-500 flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-600">Equipment in Use:</span>
+                      <span>{trade.equipment.join(', ')}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

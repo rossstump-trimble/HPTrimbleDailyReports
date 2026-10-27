@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Sparkles,
@@ -26,6 +26,7 @@ import {
   EyeOff,
   Wrench,
   MapPin,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,17 @@ export default function SuperdailyPage() {
   const [reportsCount, setReportsCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
 
+  // Location Filter & Split Mode state
+  const [availableLocations, setAvailableLocations] = useState<string[]>([]);
+  const [locationFilter, setLocationFilter] = useState<string>("all");
+  const [splitByLocation, setSplitByLocation] = useState<boolean>(false);
+
+  // Pagination for trades & missing trades
+  const [tradePage, setTradePage] = useState<number>(1);
+  const [missingPage, setMissingPage] = useState<number>(1);
+  const TRADE_PAGE_SIZE = 20;
+  const MISSING_PAGE_SIZE = 40;
+
   // Inline overview editing state
   const [isEditingOverview, setIsEditingOverview] = useState<boolean>(false);
   const [editableSummary, setEditableSummary] = useState<string>("");
@@ -57,38 +69,49 @@ export default function SuperdailyPage() {
   const [hiddenSections, setHiddenSections] = useState<string[]>([]);
   const [hiddenTradeIds, setHiddenTradeIds] = useState<string[]>([]);
 
-  const handleGenerate = useCallback(async (targetDate: string = date) => {
-    setLoading(true);
-    setError(null);
-    setIsEditingOverview(false);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/superdaily/summarize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: targetDate }),
-      });
+  const handleGenerate = useCallback(
+    async (targetDate: string = date, targetLocation: string = locationFilter) => {
+      setLoading(true);
+      setError(null);
+      setIsEditingOverview(false);
+      try {
+        const res = await fetch(`/api/projects/${projectId}/superdaily/summarize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: targetDate,
+            location: targetLocation !== "all" ? targetLocation : undefined,
+          }),
+        });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to generate Superdaily summary");
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Failed to generate Superdaily summary");
+        }
+
+        setReport(data.report);
+        setReportsCount(data.reportsCount ?? 0);
+        setEditableSummary(data.report.executiveSummary);
+        if (Array.isArray(data.availableLocations)) {
+          setAvailableLocations(data.availableLocations);
+        }
+        setHiddenSections([]);
+        setHiddenTradeIds([]);
+        setTradePage(1);
+        setMissingPage(1);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error generating superdaily");
+      } finally {
+        setLoading(false);
       }
-
-      setReport(data.report);
-      setReportsCount(data.reportsCount ?? 0);
-      setEditableSummary(data.report.executiveSummary);
-      setHiddenSections([]);
-      setHiddenTradeIds([]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error generating superdaily");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, date]);
+    },
+    [projectId, date, locationFilter],
+  );
 
   // Initial load
   useEffect(() => {
-    void handleGenerate(date);
-  }, [date, handleGenerate]);
+    void handleGenerate(date, locationFilter);
+  }, [date, locationFilter, handleGenerate]);
 
   const handlePrintPdf = () => {
     if (typeof window !== "undefined") {
@@ -131,7 +154,140 @@ export default function SuperdailyPage() {
   };
 
   const totalHiddenCount = hiddenSections.length + hiddenTradeIds.length;
-  const visibleTrades = report?.tradeSummaries.filter((t) => !hiddenTradeIds.includes(t.tradePartnerId)) || [];
+  const visibleTrades = useMemo(() => {
+    const base =
+      report?.tradeSummaries.filter((t) => !hiddenTradeIds.includes(t.tradePartnerId)) || [];
+    if (!locationFilter || locationFilter === "all") return base;
+    const target = locationFilter.trim().toLowerCase();
+    return base.filter((t) => {
+      const loc = (t.locationDescription || "Site General").trim().toLowerCase();
+      return loc === target;
+    });
+  }, [report?.tradeSummaries, hiddenTradeIds, locationFilter]);
+
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>(availableLocations);
+    for (const t of report?.tradeSummaries || []) {
+      const loc = (t.locationDescription || "").trim();
+      if (loc) set.add(loc);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [availableLocations, report?.tradeSummaries]);
+
+  const locationGroups = useMemo(() => {
+    const map = new Map<string, TradeWorkSummary[]>();
+    for (const trade of visibleTrades) {
+      const loc = (trade.locationDescription || "Site General").trim() || "Site General";
+      const existing = map.get(loc) ?? [];
+      existing.push(trade);
+      map.set(loc, existing);
+    }
+    return Array.from(map.entries()).map(([location, trades]) => ({
+      location,
+      trades,
+      workers: trades.reduce((sum, t) => sum + (t.workerCount || 0), 0),
+      hours: trades.reduce((sum, t) => sum + (t.totalHours || 0), 0),
+    }));
+  }, [visibleTrades]);
+
+  const totalTradePages = Math.max(1, Math.ceil(visibleTrades.length / TRADE_PAGE_SIZE));
+  const safeTradePage = Math.min(tradePage, totalTradePages);
+  const pagedVisibleTrades = visibleTrades.slice(
+    (safeTradePage - 1) * TRADE_PAGE_SIZE,
+    safeTradePage * TRADE_PAGE_SIZE,
+  );
+
+  const missingTradesList = report?.missingTrades || [];
+  const totalMissingPages = Math.max(1, Math.ceil(missingTradesList.length / MISSING_PAGE_SIZE));
+  const safeMissingPage = Math.min(missingPage, totalMissingPages);
+  const pagedMissingTrades = missingTradesList.slice(
+    (safeMissingPage - 1) * MISSING_PAGE_SIZE,
+    safeMissingPage * MISSING_PAGE_SIZE,
+  );
+
+  const renderTradeCard = (trade: TradeWorkSummary) => (
+    <div
+      key={trade.tradePartnerId}
+      className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-3 transition-all hover:shadow"
+    >
+      {/* Trade Card Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-foreground text-sm">
+            {trade.tradePartnerName}
+          </span>
+          {trade.category && (
+            <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
+              {trade.category}
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              Crew: <strong className="text-foreground">{trade.workerCount}</strong>
+            </span>
+            <span>•</span>
+            <span>
+              Hours: <strong className="text-foreground">{trade.totalHours} hrs</strong>
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1">
+              STA:{" "}
+              {trade.staCompleted ? (
+                <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Complete</span>
+                </span>
+              ) : (
+                <span className="text-amber-600 font-bold flex items-center gap-0.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <span>Check</span>
+                </span>
+              )}
+            </span>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => toggleTrade(trade.tradePartnerId)}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+            title="Delete this trade card before export"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Trade Card Body: Verbose Work Narrative */}
+      <div className="space-y-1.5 text-xs text-foreground">
+        <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+          <MapPin className="h-3.5 w-3.5 text-slate-400" />
+          <span>Location: {trade.locationDescription}</span>
+        </div>
+        <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap pl-5 border-l-2 border-muted">
+          {trade.workPerformed}
+        </p>
+      </div>
+
+      {/* Trade Card Footer: Equipment & Notes */}
+      {trade.equipment && trade.equipment.length > 0 && (
+        <div className="flex items-center gap-2 pt-1 border-t border-border/50 text-xs">
+          <Wrench className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground font-medium text-[11px]">Equipment:</span>
+          <div className="flex flex-wrap gap-1">
+            {trade.equipment.map((eq, eqIdx) => (
+              <Badge key={eqIdx} variant="secondary" className="text-[10px] font-normal py-0">
+                {eq}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -178,6 +334,41 @@ export default function SuperdailyPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Location Filter Selector */}
+            <div className="flex items-center gap-1.5 bg-background border border-border rounded-md px-2.5 py-1.5">
+              <MapPin className="h-4 w-4 text-[#A6192E]" />
+              <select
+                aria-label="Filter by ProjectSight Location"
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="bg-transparent text-xs font-medium text-foreground focus:outline-none max-w-[200px]"
+              >
+                <option value="all">All Project Locations</option>
+                {locationOptions.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Split by Location Toggle */}
+            <Button
+              type="button"
+              variant={splitByLocation ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSplitByLocation((prev) => !prev)}
+              className={`gap-1.5 text-xs ${
+                splitByLocation
+                  ? "bg-[#333333] text-white hover:bg-[#1f1f1f]"
+                  : "text-foreground"
+              }`}
+              title="Group and split Superdaily sections by ProjectSight Location"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>{splitByLocation ? "Split by Location: ON" : "Split by Location"}</span>
+            </Button>
+
             <div className="flex items-center gap-1.5 bg-background border border-border rounded-md px-3 py-1.5">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <input
@@ -189,7 +380,7 @@ export default function SuperdailyPage() {
             </div>
 
             <Button
-              onClick={() => handleGenerate(date)}
+              onClick={() => handleGenerate(date, locationFilter)}
               disabled={loading}
               className="gap-2 bg-[#A6192E] hover:bg-[#8B1425] text-white shadow-sm"
             >
@@ -398,12 +589,12 @@ export default function SuperdailyPage() {
                       <span>Remove</span>
                     </Button>
                   </CardHeader>
-                  <CardContent className="px-4 pb-3 pt-1">
-                    <p className="text-xs text-amber-800 dark:text-amber-300 mb-2">
+                  <CardContent className="px-4 pb-3 pt-1 space-y-2">
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
                       The following active trade partners are on the project bowling matrix but have not filed a daily report for {report.date}:
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {report.missingTrades.map((m, idx) => (
+                      {pagedMissingTrades.map((m, idx) => (
                         <div
                           key={idx}
                           className="px-2.5 py-1 rounded bg-white dark:bg-background border border-amber-300 dark:border-amber-800 text-xs font-medium text-foreground flex items-center gap-1.5 shadow-sm"
@@ -417,6 +608,37 @@ export default function SuperdailyPage() {
                         </div>
                       ))}
                     </div>
+                    {totalMissingPages > 1 && (
+                      <div className="flex items-center justify-between pt-2 text-xs text-amber-900 dark:text-amber-200 border-t border-amber-200/60">
+                        <span>
+                          Showing {(safeMissingPage - 1) * MISSING_PAGE_SIZE + 1}–
+                          {Math.min(safeMissingPage * MISSING_PAGE_SIZE, missingTradesList.length)} of{" "}
+                          {missingTradesList.length} missing trades
+                        </span>
+                        <div className="flex gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            disabled={safeMissingPage <= 1}
+                            onClick={() => setMissingPage((p) => Math.max(1, p - 1))}
+                          >
+                            Prev
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            disabled={safeMissingPage >= totalMissingPages}
+                            onClick={() => setMissingPage((p) => Math.min(totalMissingPages, p + 1))}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -429,6 +651,11 @@ export default function SuperdailyPage() {
                     <CardTitle className="text-base font-semibold flex items-center gap-2">
                       <FileText className="h-4 w-4 text-[#0063a3]" />
                       <span>Executive Site Overview</span>
+                      {locationFilter !== "all" && (
+                        <Badge variant="secondary" className="text-xs font-medium">
+                          Location: {locationFilter}
+                        </Badge>
+                      )}
                     </CardTitle>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground mr-1">Date: {report.date}</span>
@@ -529,6 +756,11 @@ export default function SuperdailyPage() {
                     <CardTitle className="text-base font-semibold flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-[#0063a3]" />
                       <span>Trade Contractor Work & Field Activities</span>
+                      {splitByLocation && (
+                        <Badge variant="outline" className="text-[11px] border-[#A6192E]/40 text-[#A6192E]">
+                          Split by Location ({locationGroups.length})
+                        </Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>
                       Individual work breakdown, detailed activities, manpower, and equipment per subcontractor.
@@ -548,7 +780,7 @@ export default function SuperdailyPage() {
                 <CardContent className="space-y-4">
                   {visibleTrades.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground text-sm border border-dashed rounded-lg">
-                      No active trade cards.{" "}
+                      No active trade cards{locationFilter !== "all" ? ` for location "${locationFilter}"` : ""}.{" "}
                       {hiddenTradeIds.length > 0 && (
                         <Button
                           variant="link"
@@ -560,90 +792,81 @@ export default function SuperdailyPage() {
                         </Button>
                       )}
                     </div>
-                  ) : (
-                    visibleTrades.map((trade: TradeWorkSummary) => (
-                      <div
-                        key={trade.tradePartnerId}
-                        className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-3 transition-all hover:shadow"
-                      >
-                        {/* Trade Card Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-foreground text-sm">
-                              {trade.tradePartnerName}
-                            </span>
-                            {trade.category && (
-                              <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground">
-                                {trade.category}
+                  ) : splitByLocation ? (
+                    <div className="space-y-6">
+                      {locationGroups.map((group) => (
+                        <div key={group.location} className="space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 border border-border px-3.5 py-2 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-[#A6192E]" />
+                              <span className="font-bold text-sm text-foreground">
+                                {group.location}
+                              </span>
+                              <Badge variant="secondary" className="text-[11px]">
+                                {group.trades.length} {group.trades.length === 1 ? "Trade" : "Trades"}
                               </Badge>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>
-                                Crew: <strong className="text-foreground">{trade.workerCount}</strong>
-                              </span>
-                              <span>•</span>
-                              <span>
-                                Hours: <strong className="text-foreground">{trade.totalHours} hrs</strong>
-                              </span>
-                              <span>•</span>
-                              <span className="flex items-center gap-1">
-                                STA:{" "}
-                                {trade.staCompleted ? (
-                                  <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                    <span>Complete</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-amber-600 font-bold flex items-center gap-0.5">
-                                    <AlertTriangle className="h-3.5 w-3.5" />
-                                    <span>Check</span>
-                                  </span>
-                                )}
-                              </span>
                             </div>
-
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <span>
+                                Headcount: <strong className="text-foreground">{group.workers}</strong>
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Hours: <strong className="text-foreground">{group.hours} hrs</strong>
+                              </span>
+                              {locationFilter === "all" && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setLocationFilter(group.location)}
+                                  className="h-6 px-2 text-[11px] text-[#A6192E] hover:bg-[#A6192E]/10"
+                                >
+                                  Filter to Location
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-3 pl-3 border-l-2 border-[#A6192E]/30">
+                            {group.trades.map(renderTradeCard)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      {pagedVisibleTrades.map(renderTradeCard)}
+                      {totalTradePages > 1 && (
+                        <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground border-t border-border">
+                          <span>
+                            Page <strong className="text-foreground">{safeTradePage}</strong> of{" "}
+                            <strong className="text-foreground">{totalTradePages}</strong> ({visibleTrades.length} trades)
+                          </span>
+                          <div className="flex gap-1.5">
                             <Button
-                              variant="ghost"
+                              type="button"
+                              variant="outline"
                               size="sm"
-                              onClick={() => toggleTrade(trade.tradePartnerId)}
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
-                              title="Delete this trade card before export"
+                              disabled={safeTradePage <= 1}
+                              onClick={() => setTradePage((p) => Math.max(1, p - 1))}
+                              className="h-7 px-2.5 text-xs"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              Previous
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={safeTradePage >= totalTradePages}
+                              onClick={() => setTradePage((p) => Math.min(totalTradePages, p + 1))}
+                              className="h-7 px-2.5 text-xs"
+                            >
+                              Next
                             </Button>
                           </div>
                         </div>
-
-                        {/* Trade Card Body: Verbose Work Narrative */}
-                        <div className="space-y-1.5 text-xs text-foreground">
-                          <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
-                            <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                            <span>Location: {trade.locationDescription}</span>
-                          </div>
-                          <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap pl-5 border-l-2 border-muted">
-                            {trade.workPerformed}
-                          </p>
-                        </div>
-
-                        {/* Trade Card Footer: Equipment & Notes */}
-                        {trade.equipment && trade.equipment.length > 0 && (
-                          <div className="flex items-center gap-2 pt-1 border-t border-border/50 text-xs">
-                            <Wrench className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className="text-muted-foreground font-medium text-[11px]">Equipment:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {trade.equipment.map((eq, eqIdx) => (
-                                <Badge key={eqIdx} variant="secondary" className="text-[10px] font-normal py-0">
-                                  {eq}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -737,6 +960,8 @@ export default function SuperdailyPage() {
           report={report}
           hiddenSectionKeys={hiddenSections}
           hiddenTradeIds={hiddenTradeIds}
+          splitByLocation={splitByLocation}
+          locationFilter={locationFilter}
         />
       )}
     </>

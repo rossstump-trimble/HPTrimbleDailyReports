@@ -122,14 +122,20 @@ export function InspectionVerifyDrawer({
       const target = inspections.find((ins) => ins.id === selectedInspectionId);
       const payload = {
         status: 'approved',
-        items: items.map((it, idx) => ({
-          id: target?.items[idx]?.id || `item-${it.itemNumber}`,
-          itemNumber: it.itemNumber,
-          prompt: it.prompt,
-          result: it.result,
-          comment: it.comment,
-        })),
+        items: items.map((it, idx) => {
+          const matchedTargetItem =
+            target?.items.find((ti) => ti.itemNumber === it.itemNumber) ||
+            target?.items[idx];
+          return {
+            id: matchedTargetItem?.id || `item-${it.itemNumber}`,
+            itemNumber: it.itemNumber,
+            prompt: it.prompt,
+            result: it.result,
+            comment: it.comment,
+          };
+        }),
         sheetImageBase64: urls[0] || previewUrl || undefined,
+        sheetImagesBase64: urls.length > 0 ? urls : previewUrl ? [previewUrl] : undefined,
         imageFileName: `${extraction.checklistNumber || 'inspection'}_scan.jpg`,
       };
 

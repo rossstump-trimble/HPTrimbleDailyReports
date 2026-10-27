@@ -3,6 +3,16 @@ import type { NextRequest } from "next/server";
 import { logAuthEvent, requestAuthSnapshot } from "@/lib/auth-debug";
 import { publicAppUrl, tidOAuthRedirectUri } from "@/lib/public-origin";
 import { decodeJWT, exchangeCodeForTokens } from "@/lib/tid-auth";
+import { getAccessControl } from "@/lib/store";
+import {
+  AUTH_COOKIE,
+  SESSION_COOKIE,
+  USER_COOKIE,
+  isAllowedLoginEmail,
+  isAdminEmail,
+  safeRedirectPath,
+  signSessionPayload,
+} from "@/lib/local-session";
 
 export const dynamic = "force-dynamic";
 
@@ -80,12 +90,33 @@ export async function GET(request: NextRequest) {
     const payload = idPayload || accessPayload || {};
 
     const sub = (payload.sub as string) || "";
-    const email = (payload.email as string) || (payload.preferred_username as string) || "";
+    const email = (
+      (payload.email as string) ||
+      (payload.preferred_username as string) ||
+      (payload.upn as string) ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
     const givenName = (payload.given_name as string) || "";
     const familyName = (payload.family_name as string) || "";
-    const name = (payload.name as string) || (givenName ? `${givenName} ${familyName}`.trim() : (email ? email.split("@")[0] : ""));
+    const name =
+      (payload.name as string) ||
+      (givenName ? `${givenName} ${familyName}`.trim() : email ? email.split("@")[0] : "");
 
-    const sessionData = {
+    const accessControl = getAccessControl();
+    if (!isAllowedLoginEmail(email, accessControl.allowedDomains, accessControl.allowedEmails)) {
+      const domainList = accessControl.allowedDomains.map((d) => `@${d}`).join(" or ");
+      return failToLogin(
+        request,
+        `Access restricted: Only ${domainList} email addresses are authorized to sign in (${email || "no email in token"}).`,
+        { rejectedEmail: email },
+      );
+    }
+
+    const userIsAdmin = isAdminEmail(email, accessControl.adminEmails);
+
+    const sessionData = signSessionPayload({
       sub,
       email,
       name,
@@ -94,9 +125,10 @@ export async function GET(request: NextRequest) {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token || undefined,
       expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
-    };
+      isAdmin: userIsAdmin,
+    });
 
-    const target = parsedPkce.from && parsedPkce.from.startsWith("/") ? parsedPkce.from : "/";
+    const target = safeRedirectPath(parsedPkce.from, "/");
     const location = publicAppUrl(request, target);
     const response = NextResponse.redirect(location);
 
@@ -111,7 +143,7 @@ export async function GET(request: NextRequest) {
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
 
-    response.cookies.set("ps_session", JSON.stringify(sessionData), {
+    response.cookies.set(SESSION_COOKIE, JSON.stringify(sessionData), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -119,7 +151,7 @@ export async function GET(request: NextRequest) {
       maxAge,
     });
 
-    response.cookies.set("ps-proto-auth", "1", {
+    response.cookies.set(AUTH_COOKIE, sessionData.sig || "1", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -127,13 +159,17 @@ export async function GET(request: NextRequest) {
       maxAge,
     });
 
-    response.cookies.set("ps_user", JSON.stringify({ name, email, sub }), {
-      httpOnly: false, // readable by client UI
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge,
-    });
+    response.cookies.set(
+      USER_COOKIE,
+      JSON.stringify({ name, email, sub, isAdmin: userIsAdmin }),
+      {
+        httpOnly: false, // readable by client UI
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge,
+      },
+    );
 
     // Clear temporary PKCE cookie
     response.cookies.set("tid_pkce", "", { path: "/", maxAge: 0 });

@@ -71,11 +71,14 @@ export interface SuperdailyReport {
 
 export interface SuperdailySummarizeRequest {
   date: string; // YYYY-MM-DD
+  location?: string; // Optional location filter
 }
 
 export interface SuperdailySummarizeResponse {
   success: boolean;
   report?: SuperdailyReport;
   reportsCount: number;
+  availableLocations?: string[];
+  activeLocation?: string;
   error?: string;
 }

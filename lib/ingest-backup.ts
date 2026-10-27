@@ -53,9 +53,10 @@ export function backupIngestedDaily(
     }
   }
 
+  const existingFiles = fs.existsSync(filesDir) ? fs.readdirSync(filesDir) : [];
   const meta = {
     backedUpAt: new Date().toISOString(),
-    fileCount: savedFiles.length,
+    fileCount: savedFiles.length > 0 ? savedFiles.length : existingFiles.length,
     projectId: report.projectId,
     date: report.date,
     dailyId: report.id,

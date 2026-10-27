@@ -84,15 +84,19 @@ export function mapFog617ToProjectSightBody(
   }, 0);
 
   const isHp = Boolean(capture.isHpEmployee);
-  const workerCount = isHp ? (capture.workerCount ?? 0) : (capture.workerCount || calculatedWorkerCount || 1);
-  const totalHours = isHp ? (capture.totalHours ?? 0) : (capture.totalHours || calculatedTotalHours || workerCount * 8);
+  const workerCount = isHp
+    ? (capture.workerCount ?? 0)
+    : (capture.workerCount ?? (calculatedWorkerCount || 1));
+  const totalHours = isHp
+    ? (capture.totalHours ?? 0)
+    : (capture.totalHours ?? (calculatedTotalHours || workerCount * 8));
   const hoursPerWorker =
     workerCount > 0 && totalHours > 0
       ? Math.round((totalHours / workerCount) * 10) / 10
-      : (isHp ? 0 : 8);
+      : (isHp || workerCount === 0 || totalHours === 0 ? 0 : 8);
 
   const dailyWorksItems: Record<string, unknown>[] = [];
-  if (crew.length > 0) {
+  if (crew.length > 0 && calculatedWorkerCount === workerCount && calculatedTotalHours === totalHours) {
     for (const r of crew) {
       const cCount = Number(r.count) || 0;
       const cHpp = Number(r.hoursPerWorker) || 8.0;

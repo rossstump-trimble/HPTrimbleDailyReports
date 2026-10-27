@@ -219,10 +219,25 @@ export default function HpIntakePage() {
   }, [projectId]);
 
   useEffect(() => {
+    try {
+      const savedRole = window.localStorage.getItem("hp_staff_role");
+      if (savedRole) setEmployeeRole(savedRole);
+      const savedName = window.localStorage.getItem("hp_staff_name");
+      if (savedName) setEmployeeName(savedName);
+    } catch {
+      // ignore storage errors
+    }
+
     fetch("/api/auth/me")
       .then((res) => res.json())
-      .then((body: { authenticated?: boolean }) => {
+      .then((body: { authenticated?: boolean; user?: { name?: string; email?: string } }) => {
         setTidReady(Boolean(body?.authenticated));
+        if (body?.user?.name && body.user.name !== "Local Developer") {
+          setEmployeeName((prev) => prev || body.user!.name!);
+        } else if (body?.user?.email && !body.user.email.startsWith("local@")) {
+          const emailPrefix = body.user.email.split("@")[0].replace(/[._-]+/g, " ");
+          setEmployeeName((prev) => prev || emailPrefix);
+        }
       })
       .catch(() => setTidReady(false));
   }, []);
@@ -487,7 +502,12 @@ export default function HpIntakePage() {
                   <input
                     type="text"
                     value={employeeName}
-                    onChange={(e) => setEmployeeName(e.target.value)}
+                    onChange={(e) => {
+                      setEmployeeName(e.target.value);
+                      try {
+                        window.localStorage.setItem("hp_staff_name", e.target.value);
+                      } catch {}
+                    }}
                     placeholder="e.g. Ross Stump"
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -498,7 +518,12 @@ export default function HpIntakePage() {
                   </label>
                   <select
                     value={employeeRole}
-                    onChange={(e) => setEmployeeRole(e.target.value)}
+                    onChange={(e) => {
+                      setEmployeeRole(e.target.value);
+                      try {
+                        window.localStorage.setItem("hp_staff_role", e.target.value);
+                      } catch {}
+                    }}
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Superintendent">Superintendent</option>

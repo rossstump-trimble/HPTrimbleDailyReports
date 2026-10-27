@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getCapacityStatus, upsertDailyReport, markDailySentToProjectSight, CapacityLimitError } from '@/lib/store';
+import {
+  getCapacityStatus,
+  upsertDailyReport,
+  markDailySentToProjectSight,
+  CapacityLimitError,
+  getDailyReportById,
+  getProjectById,
+} from '@/lib/store';
 import { saveUpload, readUpload } from '@/lib/upload-store';
 import { backupIngestedDaily, type IngestedFileAttachment } from '@/lib/ingest-backup';
 import type { DailyReport } from '@/types/hpproto';
 import { slugTradePartnerId } from '@/lib/trade-partner';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
-import { SESSION_COOKIE } from '@/lib/local-session';
+import { SESSION_COOKIE, parseVerifiedSession } from '@/lib/local-session';
+import { isLocalAuthRequest } from '@/lib/auth-mode';
 import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import { sendFog617ToProjectSight } from '@/lib/projectsight/send-daily';
 import { captureFromDailyReport } from '@/lib/projectsight/send-intake-daily';
@@ -76,7 +84,7 @@ export async function POST(req: Request) {
 
     const isMultipart =
       contentType.includes('multipart/form-data') ||
-      (!contentType && typeof (req as any).formData === 'function');
+      (!contentType && typeof (req as unknown as { formData?: unknown }).formData === 'function');
 
     if (isMultipart) {
       const parsed = await dailyFromFormData(await req.formData());
@@ -100,10 +108,42 @@ export async function POST(req: Request) {
       );
     }
 
-    const id = body.id ?? `${projectId}-${tradePartnerId}-${date}-${Date.now()}`;
-    let rawSourcePath = body.rawSourcePath;
-    let rawSourceFileName = body.rawSourceFileName;
-    let rawSourceFiles = body.rawSourceFiles ? [...body.rawSourceFiles] : [];
+    const targetProject = getProjectById(projectId);
+    if (!targetProject) {
+      return NextResponse.json(
+        { success: false, error: 'Project not found' },
+        { status: 404 },
+      );
+    }
+
+    let isAuthedStaff = false;
+    let sessionCookie: string | undefined;
+    try {
+      const jar = cookies();
+      sessionCookie = jar.get(SESSION_COOKIE)?.value;
+      const verified = parseVerifiedSession(sessionCookie);
+      isAuthedStaff = verified !== null || isLocalAuthRequest(req);
+    } catch {
+      isAuthedStaff = isLocalAuthRequest(req);
+    }
+
+    // Only authenticated staff can submit HP employee direct reports or update existing report IDs
+    const isHp = Boolean(body.isHpEmployee) && isAuthedStaff;
+    if (body.isHpEmployee && !isAuthedStaff) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required for Hensel Phelps staff submissions.' },
+        { status: 401 },
+      );
+    }
+
+    const existingReport = body.id && isAuthedStaff ? getDailyReportById(body.id) : undefined;
+    const id = existingReport
+      ? existingReport.id
+      : `${projectId}-${tradePartnerId}-${date}-${Date.now()}`;
+
+    let rawSourcePath = existingReport?.rawSourcePath;
+    let rawSourceFileName = existingReport?.rawSourceFileName;
+    let rawSourceFiles = existingReport?.rawSourceFiles ? [...existingReport.rawSourceFiles] : [];
 
     if (files.length > 0) {
       const attachments = [];
@@ -124,7 +164,7 @@ export async function POST(req: Request) {
       rawSourcePath = attachments[0].filePath;
     }
 
-    let savedStaAttachments = body.staFiles ? [...body.staFiles] : [];
+    let savedStaAttachments = existingReport?.staFiles ? [...existingReport.staFiles] : [];
     if (staFiles.length > 0) {
       const staAttachments = [];
       for (const f of staFiles) {
@@ -142,15 +182,13 @@ export async function POST(req: Request) {
       savedStaAttachments = staAttachments;
     }
 
-    const isHp = Boolean(body.isHpEmployee);
-
     const report: DailyReport = {
       id,
       projectId,
       tradePartnerId,
       tradePartnerName: tradePartnerName || body.tradePartnerName || '',
       date,
-      submittedAt: new Date().toISOString(),
+      submittedAt: existingReport?.submittedAt || new Date().toISOString(),
       submittedBy: body.submittedBy || (isHp ? 'HP Staff' : 'Field Intake'),
       locationDescription: body.locationDescription ?? '',
       workerCount: isHp ? 0 : (body.workerCount ?? 0),
@@ -168,7 +206,7 @@ export async function POST(req: Request) {
       rawSourceFileName,
       rawSourcePath,
       rawSourceFiles: rawSourceFiles.length > 0 ? rawSourceFiles : undefined,
-      approvalStatus: isHp ? 'approved' : 'pending',
+      approvalStatus: isHp ? 'approved' : (existingReport?.approvalStatus || 'pending'),
     };
 
     try {
@@ -177,6 +215,12 @@ export async function POST(req: Request) {
         fileAttachments.push({
           name: f.name,
           buffer: Buffer.from(await f.arrayBuffer()),
+        });
+      }
+      for (const sf of staFiles) {
+        fileAttachments.push({
+          name: `STA-${sf.name}`,
+          buffer: Buffer.from(await sf.arrayBuffer()),
         });
       }
       backupIngestedDaily(report, fileAttachments);
@@ -197,29 +241,37 @@ export async function POST(req: Request) {
       throw e;
     }
 
-    let psDailyId: string | undefined;
+    let psDailyId: string | undefined = saved.projectSightDailyId;
     let psAttached: boolean | undefined;
 
-    // If HP staff report, dispatch directly to ProjectSight API without requiring superintendent approval
-    if (isHp) {
+    // If HP staff report and not already synced, dispatch directly to ProjectSight API
+    if (isHp && !saved.projectSightDailyId) {
       try {
-        const jar = cookies();
-        const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
-        const portfolioId = dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
-        const targetProjectId = dest.projectId || DEFAULT_DESTINATION.projectId;
-        const sessionCookie = jar.get(SESSION_COOKIE)?.value;
+        const proj = getProjectById(projectId);
+        let dest = DEFAULT_DESTINATION;
+        try {
+          const jar = cookies();
+          dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
+        } catch {
+          // ignore outside request context
+        }
+        const portfolioId = proj?.psPortfolioId || dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
+        const targetProjectId = proj?.psProjectId || dest.projectId || DEFAULT_DESTINATION.projectId;
         const { token } = await getValidTidAccessToken(sessionCookie);
 
         if (token && portfolioId && targetProjectId) {
-          const filesToAttach = (saved.rawSourceFiles || []).map((f) => {
-            const fileData = readUpload(f.filePath);
-            return {
-              fileName: f.fileName,
-              fileBytes: fileData || Buffer.from(''),
-              mimeType: f.mimeType,
-              category: 'daily_capture' as const,
-            };
-          });
+          const filesToAttach = (saved.rawSourceFiles || [])
+            .map((f) => {
+              const fileData = readUpload(f.filePath);
+              if (!fileData) return null;
+              return {
+                fileName: f.fileName,
+                fileBytes: fileData,
+                mimeType: f.mimeType,
+                category: 'daily_capture' as const,
+              };
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
 
           const capture = captureFromDailyReport(saved);
           const psResult = await sendFog617ToProjectSight({
@@ -251,9 +303,21 @@ export async function POST(req: Request) {
       }
     }
 
+    const clientReport = isAuthedStaff
+      ? saved
+      : {
+          id: saved.id,
+          projectId: saved.projectId,
+          tradePartnerId: saved.tradePartnerId,
+          tradePartnerName: saved.tradePartnerName,
+          date: saved.date,
+          submittedAt: saved.submittedAt,
+          approvalStatus: saved.approvalStatus,
+        };
+
     return NextResponse.json({
       success: true,
-      report: saved,
+      report: clientReport,
       status: isHp ? 'approved' : 'pending_review',
       autoApproved: isHp,
       projectSightDailyId: psDailyId,

@@ -29,6 +29,7 @@ function LoginForm() {
   const [authMode, setAuthMode] = useState<"unknown" | "local" | "tid">("unknown");
   const [showManual, setShowManual] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -67,7 +68,7 @@ function LoginForm() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, from }),
+        body: JSON.stringify({ email: email.trim(), password, from }),
       });
 
       const data = await res.json();
@@ -109,7 +110,9 @@ function LoginForm() {
 
         <div className="text-center">
           <h1 className="text-lg font-semibold text-gray-900">HP Daily Reporting</h1>
-          <p className="text-xs text-gray-500 mt-1">Sign in with Trimble Identity</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Sign in with Trimble Identity (@henselphelps.com or @trimble.com)
+          </p>
         </div>
 
         {error && (
@@ -138,16 +141,26 @@ function LoginForm() {
             onClick={() => setShowManual((v) => !v)}
             className="text-xs text-gray-400 hover:text-gray-600 underline"
           >
-            {showManual ? "Hide direct passkey" : "Prototype direct passkey"}
+            {showManual ? "Hide direct passkey" : "Admin passkey sign-in"}
           </button>
 
           {showManual && (
             <form onSubmit={handlePasswordSubmit} className="w-full mt-3 flex flex-col gap-2">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Work Email (@henselphelps.com / @trimble.com)"
+                autoComplete="email"
+                style={{ color: "#111827", background: "#ffffff" }}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
               <div className="relative">
                 <input
                   ref={inputRef}
                   type={showPassword ? "text" : "password"}
-                  placeholder="Prototype Password"
+                  placeholder="Admin Passkey"
                   autoComplete="current-password"
                   style={{ color: "#111827", background: "#ffffff" }}
                   className="w-full px-3 py-2 pr-9 rounded-lg border border-gray-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"

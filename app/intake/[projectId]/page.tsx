@@ -323,49 +323,15 @@ export default function IntakePage() {
       .then((data) => {
         if (data?.project?.name) setProjectName(data.project.name);
         if (data?.project?.code) setProjectCode(data.project.code);
-        if (data?.project?.tradePartners) setTradePartners(data.project.tradePartners);
-      })
-      .catch(() => {});
-
-    fetch(`/api/projects/${projectId}/companies`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data?.companies)) {
-          const tracked: TradePartner[] = data.companies
-            .filter((c: { isTracked?: boolean }) => c.isTracked)
-            .map((c: { id: string; name: string; trade?: string; contacts?: { email?: string }[] }) => ({
-              id: c.id,
-              name: c.name,
-              category: c.trade || "Trade Partner",
-              contactEmail: c.contacts?.[0]?.email,
-            }));
-          if (tracked.length > 0) {
-            setTradePartners(tracked);
-            return;
-          }
+        if (Array.isArray(data?.project?.tradePartners)) {
+          setTradePartners(data.project.tradePartners);
         }
-        if (Array.isArray(data?.tradePartners) && data.tradePartners.length > 0) {
-          setTradePartners(data.tradePartners);
+        if (data?.capacity) {
+          setCapacity(data.capacity);
         }
       })
-      .catch(() => {});
-
-    fetch(`/api/bowling/${projectId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        const partners: TradePartner[] =
-          data?.tradePartners ?? data?.rows?.map((row: { tradePartner: TradePartner }) => row.tradePartner) ?? [];
-        if (partners.length > 0) setTradePartners(partners);
-      })
-      .catch(() => setTradePartners([]))
+      .catch(() => {})
       .finally(() => setPartnersLoading(false));
-
-    fetch("/api/projects")
-      .then((r) => r.json())
-      .then((data: { capacity?: { total: number; max: number; isLocked: boolean } }) => {
-        if (data.capacity) setCapacity(data.capacity);
-      })
-      .catch(() => {});
   }, [projectId]);
 
   useEffect(() => {
@@ -679,7 +645,7 @@ export default function IntakePage() {
                   Your Trade Company <span className="text-red-500">*</span>
                 </label>
 
-                {!partnersLoading && tradePartners.length > 0 && (
+                {!partnersLoading && tradePartners.length > 0 && tradePartners.length <= 200 && (
                   <select
                     value={
                       tradePartners.some((tp) => tp.id === formData.tradePartnerId)

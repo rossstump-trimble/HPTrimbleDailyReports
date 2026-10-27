@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalAuthRequest } from "@/lib/auth-mode";
-import { applyLocalAuthCookies } from "@/lib/local-session";
+import { applyLocalAuthCookies, safeRedirectPath } from "@/lib/local-session";
 
 export const dynamic = "force-dynamic";
-
-function safeFrom(from: string | null): string {
-  return from && from.startsWith("/") ? from : "/";
-}
 
 export async function GET(request: NextRequest) {
   if (!isLocalAuthRequest(request)) {
@@ -17,7 +13,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const target = safeFrom(request.nextUrl.searchParams.get("from"));
+  const target = safeRedirectPath(request.nextUrl.searchParams.get("from"), "/");
   const response = NextResponse.redirect(new URL(target, request.url));
   applyLocalAuthCookies(response);
   return response;

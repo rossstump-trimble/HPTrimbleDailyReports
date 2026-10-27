@@ -12,6 +12,7 @@ import {
   CompanyContact,
   MAX_DAILY_REPORTS,
   InspectionRecord,
+  AccessControlConfig,
 } from '@/types/hpproto';
 import type { PunchItem, PunchCommitActionItem, PunchCommitResult } from '@/types/punch';
 
@@ -113,10 +114,9 @@ export function getStore(filePath: string = getDefaultDbPath()): StoreData {
       }
     }
     return parsed;
-  } catch {
-    const initialData: StoreData = { projects: getInitialProjects(), dailyReports: [] };
-    fs.writeFileSync(filePath, JSON.stringify(initialData, null, 2), 'utf-8');
-    return initialData;
+  } catch (err) {
+    console.error('[store] failed to parse store file, returning in-memory initial data without overwriting disk:', err);
+    return { projects: getInitialProjects(), dailyReports: [] };
   }
 }
 
@@ -188,13 +188,119 @@ export function deleteProject(projectId: string, filePath: string = getDefaultDb
 
   if (filtered.length !== initialCount) {
     const updatedStore: StoreData = {
+      ...store,
       projects: filtered,
       dailyReports: store.dailyReports.filter(r => r.projectId.toLowerCase() !== projectId.toLowerCase()),
+      punchItems: store.punchItems
+        ? store.punchItems.filter(p => p.projectId.toLowerCase() !== projectId.toLowerCase())
+        : undefined,
+      inspections: store.inspections
+        ? store.inspections.filter(ins => ins.projectId.toLowerCase() !== projectId.toLowerCase())
+        : undefined,
     };
     saveStore(updatedStore, filePath);
     return true;
   }
   return false;
+}
+
+export const DEFAULT_ALLOWED_DOMAINS = ['henselphelps.com', 'trimble.com'];
+export const DEFAULT_ADMIN_EMAILS = [
+  'ross_stump@trimble.com',
+  'nathan_patton@trimble.com',
+  'jadan_anderson@trimble.com',
+  'egrim@henselphelps.com',
+];
+
+export function getAccessControl(filePath: string = getDefaultDbPath()): AccessControlConfig {
+  const store = getStore(filePath);
+  const current = store.accessControl;
+  const envAdmins = (process.env.ACCESS_ADMIN_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+  const envDomains = (process.env.ALLOWED_LOGIN_DOMAINS || '')
+    .split(',')
+    .map(d => d.trim().toLowerCase().replace(/^@+/, ''))
+    .filter(Boolean);
+
+  const allowedDomains = Array.from(
+    new Set([
+      ...(current?.allowedDomains && current.allowedDomains.length > 0
+        ? current.allowedDomains.map(d => d.trim().toLowerCase().replace(/^@+/, ''))
+        : DEFAULT_ALLOWED_DOMAINS),
+      ...envDomains,
+    ]),
+  ).filter(Boolean);
+
+  const adminEmails = Array.from(
+    new Set([
+      ...(current?.adminEmails && current.adminEmails.length > 0
+        ? current.adminEmails.map(e => e.trim().toLowerCase())
+        : DEFAULT_ADMIN_EMAILS),
+      'egrim@henselphelps.com',
+      ...envAdmins,
+    ]),
+  ).filter(Boolean);
+
+  const allowedEmails = Array.from(
+    new Set((current?.allowedEmails || []).map(e => e.trim().toLowerCase()).filter(Boolean)),
+  );
+
+  return {
+    allowedDomains,
+    allowedEmails,
+    adminEmails,
+    allowPasskeyLogin: current?.allowPasskeyLogin ?? false,
+    updatedAt: current?.updatedAt,
+  };
+}
+
+export function updateAccessControl(
+  updates: Partial<AccessControlConfig>,
+  filePath: string = getDefaultDbPath(),
+): AccessControlConfig {
+  const store = getStore(filePath);
+  const current = getAccessControl(filePath);
+
+  const next: AccessControlConfig = {
+    allowedDomains: updates.allowedDomains
+      ? Array.from(
+          new Set(
+            updates.allowedDomains
+              .map(d => d.trim().toLowerCase().replace(/^@+/, ''))
+              .filter(Boolean),
+          ),
+        )
+      : current.allowedDomains,
+    allowedEmails: updates.allowedEmails
+      ? Array.from(
+          new Set(
+            updates.allowedEmails
+              .map(e => e.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        )
+      : current.allowedEmails,
+    adminEmails: updates.adminEmails
+      ? Array.from(
+          new Set(
+            updates.adminEmails
+              .map(e => e.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        )
+      : current.adminEmails,
+    allowPasskeyLogin:
+      updates.allowPasskeyLogin !== undefined
+        ? Boolean(updates.allowPasskeyLogin)
+        : current.allowPasskeyLogin,
+    updatedAt: new Date().toISOString(),
+  };
+
+  store.accessControl = next;
+  saveStore(store, filePath);
+  return next;
 }
 
 export function updateProjectWorkingDays(
@@ -245,13 +351,18 @@ export function getProjectCompanies(
   }
 
   const excludedSet = new Set((proj.excludedTradePartnerIds || []).map(x => x.toLowerCase()));
+  const existingCompanyKeys = new Set<string>();
+  for (const c of proj.availableCompanies) {
+    existingCompanyKeys.add(c.id.toLowerCase());
+    existingCompanyKeys.add(c.name.toLowerCase());
+  }
 
   // Ensure any partner currently in tradePartners is in availableCompanies
   let changed = false;
   for (const tp of proj.tradePartners || []) {
-    const exists = proj.availableCompanies.some(
-      c => c.id.toLowerCase() === tp.id.toLowerCase() || c.name.toLowerCase() === tp.name.toLowerCase(),
-    );
+    const exists =
+      existingCompanyKeys.has(tp.id.toLowerCase()) ||
+      existingCompanyKeys.has(tp.name.toLowerCase());
     if (!exists) {
       proj.availableCompanies.push({
         id: tp.id,
@@ -260,6 +371,8 @@ export function getProjectCompanies(
         isTracked: !excludedSet.has(tp.id.toLowerCase()) && !excludedSet.has(tp.name.toLowerCase()) && !excludedSet.has(slugTradePartnerId(tp.name)),
         contacts: [],
       });
+      existingCompanyKeys.add(tp.id.toLowerCase());
+      existingCompanyKeys.add(tp.name.toLowerCase());
       changed = true;
     }
   }
@@ -293,25 +406,24 @@ export function setProjectCompanies(
   if (!proj) return;
 
   proj.availableCompanies = companies;
-  if (!proj.excludedTradePartnerIds) {
-    proj.excludedTradePartnerIds = [];
-  }
+  const excludedSet = new Set((proj.excludedTradePartnerIds || []).map(x => x.toLowerCase()));
 
   for (const c of companies) {
     const cId = c.id.toLowerCase();
     const cName = c.name.toLowerCase();
     const cSlug = slugTradePartnerId(c.name);
     if (!c.isTracked) {
-      if (!proj.excludedTradePartnerIds.some(x => x.toLowerCase() === cId)) proj.excludedTradePartnerIds.push(cId);
-      if (!proj.excludedTradePartnerIds.some(x => x.toLowerCase() === cName)) proj.excludedTradePartnerIds.push(cName);
-      if (cSlug && !proj.excludedTradePartnerIds.some(x => x.toLowerCase() === cSlug)) proj.excludedTradePartnerIds.push(cSlug);
+      if (cId) excludedSet.add(cId);
+      if (cName) excludedSet.add(cName);
+      if (cSlug) excludedSet.add(cSlug);
     } else {
-      proj.excludedTradePartnerIds = proj.excludedTradePartnerIds.filter(
-        id => id.toLowerCase() !== cId && id.toLowerCase() !== cName && id.toLowerCase() !== cSlug,
-      );
+      excludedSet.delete(cId);
+      excludedSet.delete(cName);
+      if (cSlug) excludedSet.delete(cSlug);
     }
   }
 
+  proj.excludedTradePartnerIds = Array.from(excludedSet);
   syncTradePartnersFromCompanies(proj);
   saveStore(store, filePath);
 }
@@ -697,9 +809,24 @@ export function upsertDailyReport(report: DailyReport, filePath: string = getDef
     throw new CapacityLimitError();
   }
 
+  const existingReport = existingIndex >= 0 ? store.dailyReports[existingIndex] : undefined;
+  const isExplicitEdit = Boolean(existingReport && existingReport.id === report.id);
   const normalized: DailyReport = {
     ...report,
-    approvalStatus: report.approvalStatus || 'pending',
+    approvalStatus:
+      report.approvalStatus ||
+      (isExplicitEdit ? existingReport?.approvalStatus : undefined) ||
+      'pending',
+    approvedAt: report.approvedAt ?? (isExplicitEdit ? existingReport?.approvedAt : undefined),
+    approvedBy: report.approvedBy ?? (isExplicitEdit ? existingReport?.approvedBy : undefined),
+    projectSightDailyId:
+      report.projectSightDailyId ?? (isExplicitEdit ? existingReport?.projectSightDailyId : undefined),
+    projectSightPortfolioId:
+      report.projectSightPortfolioId ?? (isExplicitEdit ? existingReport?.projectSightPortfolioId : undefined),
+    projectSightProjectId:
+      report.projectSightProjectId ?? (isExplicitEdit ? existingReport?.projectSightProjectId : undefined),
+    sentToProjectSightAt:
+      report.sentToProjectSightAt ?? (isExplicitEdit ? existingReport?.sentToProjectSightAt : undefined),
   };
 
   const filtered = store.dailyReports.filter((r) => !isMatch(r));
@@ -852,7 +979,14 @@ export function getBowlingMatrix(
   workingDaysOverride?: number[],
   liveReports?: DailyReport[],
 ): BowlingMatrix {
-  const project = getProjectById(projectId, filePath) ?? SEEDED_PROJECTS[0];
+  const project = getProjectById(projectId, filePath) ?? {
+    id: projectId,
+    code: projectId.toUpperCase().slice(0, 8),
+    name: projectId,
+    createdAt: new Date().toISOString(),
+    workingDays: [1, 2, 3, 4, 5],
+    tradePartners: [],
+  };
   const activeWorkingDays = workingDaysOverride ?? project.workingDays ?? [1, 2, 3, 4, 5];
   const [yearStr, monthStr] = yearMonth.split('-');
   const year = parseInt(yearStr, 10);
@@ -1078,7 +1212,7 @@ export function batchCommitPunchItems(
     switch (actionItem.action) {
       case 'create': {
         const partial = actionItem.item ?? {};
-        const { id: _unusedId, ...partialWithoutId } = partial;
+        const { id: _unusedId, projectId: _unusedProjId, ...partialWithoutId } = partial;
         const newItem: PunchItem = {
           id: `punch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           projectId,
@@ -1098,7 +1232,9 @@ export function batchCommitPunchItems(
         const target = store.punchItems.find(
           (p) =>
             p.projectId.toLowerCase() === projectId.toLowerCase() &&
-            (actionItem.targetItemId ? p.id === actionItem.targetItemId : p.itemNumber === actionItem.targetItemNumber),
+            (actionItem.targetItemId
+              ? p.id === actionItem.targetItemId || p.psPunchId === actionItem.targetItemId
+              : p.itemNumber === actionItem.targetItemNumber),
         );
         if (!target) {
           failedCount++;

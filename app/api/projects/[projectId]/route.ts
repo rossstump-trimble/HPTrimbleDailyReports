@@ -1,15 +1,52 @@
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { getProjectById, updateProjectWorkingDays, updateProjectTradePartners, deleteProject } from '@/lib/store';
+import { getProjectById, updateProjectWorkingDays, updateProjectTradePartners, deleteProject, getCapacityStatus } from '@/lib/store';
+import { SESSION_COOKIE, parseVerifiedSession } from '@/lib/local-session';
+import { isLocalAuthRequest } from '@/lib/auth-mode';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: Request, { params }: { params: { projectId: string } }) {
+export async function GET(req: Request, { params }: { params: { projectId: string } }) {
   try {
     const project = getProjectById(params.projectId);
     if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
-    return NextResponse.json({ project });
+
+    let isAuthed = false;
+    try {
+      if (isLocalAuthRequest(req)) {
+        isAuthed = true;
+      } else {
+        const jar = cookies();
+        const session = parseVerifiedSession(jar.get(SESSION_COOKIE)?.value);
+        isAuthed = session !== null;
+      }
+    } catch {
+      isAuthed = false;
+    }
+
+    const capacity = getCapacityStatus();
+
+    if (!isAuthed) {
+      // Return redacted project view for public QR intake form
+      return NextResponse.json({
+        project: {
+          id: project.id,
+          code: project.code,
+          name: project.name,
+          workingDays: project.workingDays,
+          tradePartners: (project.tradePartners || []).map((tp) => ({
+            id: tp.id,
+            name: tp.name,
+            category: tp.category,
+          })),
+        },
+        capacity,
+      });
+    }
+
+    return NextResponse.json({ project, capacity });
   } catch (err) {
     console.error('[api/projects/[projectId]] GET failed', err);
     return NextResponse.json({ error: 'Failed to get project' }, { status: 500 });

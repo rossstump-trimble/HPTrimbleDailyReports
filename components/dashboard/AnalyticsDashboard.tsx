@@ -65,6 +65,21 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
   const pieData = data.analytics.statusMix.filter((s) => s.status !== "na");
   const trend = data.analytics.dailyTrend.filter((d) => d.date <= data.asOfDate);
   const { kpis } = data;
+  const [compliancePage, setCompliancePage] = React.useState(1);
+  const [jtdPage, setJtdPage] = React.useState(1);
+  const ANALYTICS_PAGE_SIZE = 20;
+
+  const totalCompliancePages = Math.max(1, Math.ceil(data.analytics.tradeCompliance.length / ANALYTICS_PAGE_SIZE));
+  const pagedCompliance = data.analytics.tradeCompliance.slice(
+    (compliancePage - 1) * ANALYTICS_PAGE_SIZE,
+    compliancePage * ANALYTICS_PAGE_SIZE,
+  );
+
+  const totalJtdPages = Math.max(1, Math.ceil(data.analytics.jobToDate.rows.length / ANALYTICS_PAGE_SIZE));
+  const pagedJtdRows = data.analytics.jobToDate.rows.slice(
+    (jtdPage - 1) * ANALYTICS_PAGE_SIZE,
+    jtdPage * ANALYTICS_PAGE_SIZE,
+  );
 
   return (
     <div className="space-y-4">
@@ -245,7 +260,7 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
             <CardDescription>Lowest logged rate first</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2.5">
-            {data.analytics.tradeCompliance.map((t) => (
+            {pagedCompliance.map((t) => (
               <div key={t.tradeId}>
                 <div className="flex items-center justify-between text-sm mb-1">
                   <span className="font-medium truncate pr-2">{t.tradeName}</span>
@@ -261,6 +276,31 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
                 </div>
               </div>
             ))}
+            {totalCompliancePages > 1 && (
+              <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground border-t border-border/60">
+                <span>
+                  Page {compliancePage} of {totalCompliancePages}
+                </span>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={compliancePage <= 1}
+                    onClick={() => setCompliancePage((p) => Math.max(1, p - 1))}
+                    className="px-2 py-1 rounded border border-border disabled:opacity-40 hover:bg-muted"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    disabled={compliancePage >= totalCompliancePages}
+                    onClick={() => setCompliancePage((p) => Math.min(totalCompliancePages, p + 1))}
+                    className="px-2 py-1 rounded border border-border disabled:opacity-40 hover:bg-muted"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -270,7 +310,7 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
           <CardTitle className="text-base">Job-to-date hours</CardTitle>
           <CardDescription>Cumulative manpower and hours by month</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="overflow-x-auto space-y-3">
           <table className="w-full text-sm border-collapse min-w-[720px]">
             <thead>
               <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -284,7 +324,7 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
               </tr>
             </thead>
             <tbody>
-              {data.analytics.jobToDate.rows.map((row) => (
+              {pagedJtdRows.map((row) => (
                 <tr key={row.tradeId} className="border-b border-border/60 last:border-0">
                   <td className="py-2 pr-3 font-medium whitespace-nowrap">{row.tradeName}</td>
                   {row.byMonth.map((cell) => (
@@ -299,6 +339,31 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
               ))}
             </tbody>
           </table>
+          {totalJtdPages > 1 && (
+            <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground border-t border-border/60">
+              <span>
+                Page {jtdPage} of {totalJtdPages} ({data.analytics.jobToDate.rows.length} trades)
+              </span>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  disabled={jtdPage <= 1}
+                  onClick={() => setJtdPage((p) => Math.max(1, p - 1))}
+                  className="px-2 py-1 rounded border border-border disabled:opacity-40 hover:bg-muted"
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  disabled={jtdPage >= totalJtdPages}
+                  onClick={() => setJtdPage((p) => Math.min(totalJtdPages, p + 1))}
+                  className="px-2 py-1 rounded border border-border disabled:opacity-40 hover:bg-muted"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

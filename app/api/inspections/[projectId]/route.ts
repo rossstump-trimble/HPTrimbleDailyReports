@@ -202,33 +202,36 @@ export async function POST(req: Request, { params }: { params: { projectId: stri
 
     if (token && psPortfolioId && psProjectId) {
       const rawChecklists = await listChecklists(token, psPortfolioId, psProjectId);
-      const synced: InspectionRecord[] = rawChecklists.map((ck, idx) => ({
-        id: `insp-${projectId}-${ck.id || idx + 1}`,
-        projectId,
-        psRecordId: ck.id,
-        number: ck.number || `CK-00${idx + 1}`,
-        title: ck.title,
-        location: ck.location,
-        status: (ck.workflowState.toLowerCase() === 'approved' ? 'approved' : 'open') as InspectionRecord['status'],
-        items: (ck.items || []).map((it, itemIdx) => ({
-          id: it.id || `item-${itemIdx + 1}`,
-          itemNumber: it.itemNumber || itemIdx + 1,
-          prompt: it.prompt,
-          result: (it.result as InspectionRecord['items'][0]['result']) || 'Unchecked',
-          comment: it.comment,
-        })),
-        source: 'projectsight',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }));
+      const isReal = rawChecklists.some((ck) => ck.id !== 'ck-fix-001');
+      if (isReal) {
+        const synced: InspectionRecord[] = rawChecklists.map((ck, idx) => ({
+          id: `insp-${projectId}-${ck.id || idx + 1}`,
+          projectId,
+          psRecordId: ck.id,
+          number: ck.number || `CK-00${idx + 1}`,
+          title: ck.title,
+          location: ck.location,
+          status: (ck.workflowState.toLowerCase() === 'approved' ? 'approved' : 'open') as InspectionRecord['status'],
+          items: (ck.items || []).map((it, itemIdx) => ({
+            id: it.id || `item-${itemIdx + 1}`,
+            itemNumber: it.itemNumber || itemIdx + 1,
+            prompt: it.prompt,
+            result: (it.result as InspectionRecord['items'][0]['result']) || 'Unchecked',
+            comment: it.comment,
+          })),
+          source: 'projectsight',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
 
-      if (synced.length > 0) {
-        clearInspectionsForProject(projectId);
+        if (synced.length > 0) {
+          clearInspectionsForProject(projectId);
+        }
+        for (const rec of synced) {
+          saveInspectionRecord(rec);
+        }
+        return NextResponse.json({ success: true, inspections: synced });
       }
-      for (const rec of synced) {
-        saveInspectionRecord(rec);
-      }
-      return NextResponse.json({ success: true, inspections: synced });
     }
 
     const current = getInspectionsForProject(projectId);

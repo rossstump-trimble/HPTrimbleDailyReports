@@ -135,8 +135,11 @@ export async function transcribeAudioFromBuffer(
     { name: 'gemini', run: () => transcribeWithGemini(buffer, normalizedMime, requestId) },
   ];
 
-  for (const provider of providers) {
-    try {
+    for (const provider of providers) {
+      if ((provider.name === 'groq' || provider.name === 'openai') && process.env.ALLOW_PUBLIC_STT_FALLBACK !== 'true') {
+        continue;
+      }
+      try {
       const text = await provider.run();
       if (text) {
         voiceLog('stt', 'info', 'transcribe succeeded', {

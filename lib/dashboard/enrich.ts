@@ -296,10 +296,18 @@ function buildAnalytics(
 
   const jtdMonths = priorMonths(yearMonth, 8);
   const months: JobToDateMonth[] = jtdMonths.map((m) => ({ month: m, label: monthLabel(m) }));
+  const monthRowLookup = new Map<string, Map<string, DashboardRow>>();
+  for (const m of jtdMonths) {
+    const monthRows = m === yearMonth ? rows : buildMonthRows(m, asOf, sourceReports, projectWorkingDays, trades);
+    const byTradeId = new Map<string, DashboardRow>();
+    for (const r of monthRows) {
+      byTradeId.set(r.trade.id, r);
+    }
+    monthRowLookup.set(m, byTradeId);
+  }
   const jtdRows: JobToDateRow[] = trades.map((trade) => {
     const byMonth = jtdMonths.map((m) => {
-      const monthRows = m === yearMonth ? rows : buildMonthRows(m, asOf, sourceReports, projectWorkingDays, trades);
-      const row = monthRows.find((r) => r.trade.id === trade.id);
+      const row = monthRowLookup.get(m)?.get(trade.id);
       return {
         month: m,
         manpower: row?.monthTotalManpower ?? 0,
@@ -386,15 +394,27 @@ export function getDashboardPayload(
   }
 
   // Expand lines if multiple people from the same company submitted daily reports
-  if (!overrideTrades && trades.length > 0) {
+  if (!overrideTrades && trades.length > 0 && sourceReports.length > 0) {
+    const reportsByName = new Map<string, SourceDailyReport[]>();
+    const reportsBySlug = new Map<string, SourceDailyReport[]>();
+    for (const r of sourceReports) {
+      if (!r.createdByName) continue;
+      const nameKey = r.createdByName.toLowerCase();
+      const slugKey = slugTradePartnerId(r.createdByName).toLowerCase();
+      const list1 = reportsByName.get(nameKey) ?? [];
+      list1.push(r);
+      reportsByName.set(nameKey, list1);
+
+      const list2 = reportsBySlug.get(slugKey) ?? [];
+      list2.push(r);
+      reportsBySlug.set(slugKey, list2);
+    }
+
     const expandedTrades: DashboardTradePartner[] = [];
     for (const trade of trades) {
-      const companyReports = sourceReports.filter(
-        (r) =>
-          r.createdByName &&
-          (r.createdByName.toLowerCase() === trade.name.toLowerCase() ||
-            slugTradePartnerId(r.createdByName).toLowerCase() === trade.id.toLowerCase()),
-      );
+      const byName = reportsByName.get(trade.name.toLowerCase()) ?? [];
+      const bySlug = reportsBySlug.get(trade.id.toLowerCase()) ?? [];
+      const companyReports = Array.from(new Set([...byName, ...bySlug]));
 
       const submitters = Array.from(
         new Set(

@@ -33,11 +33,12 @@ export async function POST(
       items?: InspectionChecklistItem[];
       status?: InspectionRecord['status'];
       sheetImageBase64?: string;
+      sheetImagesBase64?: string[];
       imageFileName?: string;
     };
 
     const target = getInspectionById(inspectionId);
-    if (!target) {
+    if (!target || target.projectId.toLowerCase() !== projectId.toLowerCase()) {
       return NextResponse.json(
         { success: false, error: 'Inspection record not found' },
         { status: 404 },
@@ -113,16 +114,29 @@ export async function POST(
           updatedStatus === 'approved' ? 'Approved' : 'In Review',
         );
 
-        if (body.sheetImageBase64) {
+        const imagesToUpload = Array.isArray(body.sheetImagesBase64) && body.sheetImagesBase64.length > 0
+          ? body.sheetImagesBase64
+          : body.sheetImageBase64
+          ? [body.sheetImageBase64]
+          : [];
+
+        for (let imgIdx = 0; imgIdx < imagesToUpload.length; imgIdx++) {
           try {
-            const cleanBase64 = body.sheetImageBase64.replace(/^data:[^;]+;base64,/, '');
+            const rawImg = imagesToUpload[imgIdx];
+            if (!rawImg) continue;
+            const cleanBase64 = rawImg.replace(/^data:[^;]+;base64,/, '');
             const imgBuffer = Buffer.from(cleanBase64, 'base64');
+            const baseFileName = body.imageFileName || 'inspection_scan.jpg';
+            const pageFileName =
+              imagesToUpload.length > 1
+                ? baseFileName.replace(/(\.[^.]+)?$/, `_page${imgIdx + 1}$1`)
+                : baseFileName;
             await uploadChecklistAttachment(
               token,
               psPortfolioId,
               psProjectId,
               target.psRecordId,
-              body.imageFileName || 'inspection_scan.jpg',
+              pageFileName,
               imgBuffer,
               'image/jpeg',
             );
@@ -146,12 +160,15 @@ export async function POST(
       psSyncError,
     });
 
-    // Cross-sync to today's daily report
+    // Cross-sync to today's general contractor daily report
     try {
       const today = new Date().toISOString().split('T')[0];
       const store = getStore();
       const existingDaily = store.dailyReports.find(
-        (d) => d.projectId.toLowerCase() === projectId.toLowerCase() && d.date === today,
+        (d) =>
+          d.projectId.toLowerCase() === projectId.toLowerCase() &&
+          d.date === today &&
+          (d.tradePartnerId === 'general-contractor' || d.tradePartnerId === 'hensel-phelps' || d.isHpEmployee),
       );
 
       const passedCount = updatedItems.filter((it) => it.result === 'Pass').length;

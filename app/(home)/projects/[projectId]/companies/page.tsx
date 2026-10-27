@@ -9,6 +9,7 @@ import {
   Users,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   CheckCircle2,
   AlertCircle,
   Plus,
@@ -31,7 +32,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import type { ProjectCompany, CompanyContact } from "@/types/hpproto";
+import type { ProjectCompany } from "@/types/hpproto";
+
+interface SyncPreviewData {
+  remoteCount: number;
+  addedCount: number;
+  existingMatchCount: number;
+  currentCount: number;
+  totalAfterSync: number;
+  sampleNames: string[];
+  message: string;
+}
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 export default function CompaniesPage() {
   const params = useParams<{ projectId: string }>();
@@ -42,8 +55,14 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [expandedCompanyIds, setExpandedCompanyIds] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Sync Confirmation Dialog State
+  const [syncPreview, setSyncPreview] = useState<SyncPreviewData | null>(null);
+  const [trackImportedByDefault, setTrackImportedByDefault] = useState(true);
 
   // New Contact Dialog
   const [selectedCompanyForContact, setSelectedCompanyForContact] = useState<ProjectCompany | null>(null);
@@ -76,7 +95,6 @@ export default function CompaniesPage() {
   }, [fetchCompanies]);
 
   const handleToggleTracking = async (company: ProjectCompany, nextTracked: boolean) => {
-    // Optimistic UI update
     setCompanies((prev) =>
       prev.map((c) => (c.id === company.id ? { ...c, isTracked: nextTracked } : c)),
     );
@@ -103,7 +121,6 @@ export default function CompaniesPage() {
       }
     } catch (err) {
       console.error(err);
-      // Revert optimistic update
       setCompanies((prev) =>
         prev.map((c) => (c.id === company.id ? { ...c, isTracked: !nextTracked } : c)),
       );
@@ -145,19 +162,92 @@ export default function CompaniesPage() {
     }
   };
 
-  const handleSyncConnected = async () => {
+  const handleClearAllCompanies = async () => {
+    if (!confirm(`Are you sure you want to remove all ${companies.length} companies from this project?`)) {
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      const res = await fetch(`/api/projects/${projectId}/companies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear" }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to clear companies");
+      }
+      setCompanies([]);
+      setPage(1);
+      setFeedback({
+        type: "success",
+        text: "Cleared all company records from this project.",
+      });
+    } catch (err) {
+      console.error(err);
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to clear companies",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleRequestSyncPreview = async () => {
     try {
       setSyncing(true);
       setFeedback(null);
       const res = await fetch(`/api/projects/${projectId}/companies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "sync-connected" }),
+        body: JSON.stringify({ action: "preview-sync-connected" }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to check companies from ProjectSight");
+      }
+      const addedCount = Number(json.addedCount ?? 0);
+      setTrackImportedByDefault(addedCount <= 50);
+      setSyncPreview({
+        remoteCount: Number(json.remoteCount ?? 0),
+        addedCount,
+        existingMatchCount: Number(json.existingMatchCount ?? 0),
+        currentCount: Number(json.currentCount ?? companies.length),
+        totalAfterSync: Number(json.totalAfterSync ?? companies.length + addedCount),
+        sampleNames: Array.isArray(json.sampleNames) ? json.sampleNames : [],
+        message: json.message || `Found ${json.remoteCount ?? 0} companies in ProjectSight.`,
+      });
+    } catch (err) {
+      console.error(err);
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Sync check from ProjectSight failed.",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleConfirmSyncConnected = async () => {
+    try {
+      setSyncing(true);
+      setFeedback(null);
+      const res = await fetch(`/api/projects/${projectId}/companies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "sync-connected",
+          trackImported: trackImportedByDefault,
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Failed to sync companies from ProjectSight");
       }
+      setSyncPreview(null);
+      setPage(1);
       setFeedback({
         type: "success",
         text: json.message || `Successfully synced ${json.count || 0} companies from ProjectSight.`,
@@ -252,6 +342,17 @@ export default function CompaniesPage() {
     );
   }, [companies, search]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCompanies.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedCompanies = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredCompanies.slice(start, start + pageSize);
+  }, [filteredCompanies, safePage, pageSize]);
+
   const trackedCount = useMemo(() => companies.filter((c) => c.isTracked).length, [companies]);
 
   return (
@@ -285,11 +386,24 @@ export default function CompaniesPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Badge variant="outline" className="px-3 py-1 font-medium bg-blue-50 text-tc-blue border-blue-200">
               <UserCheck className="w-3.5 h-3.5 mr-1" />
               {trackedCount} Tracked on Bowling Sheet
             </Badge>
+
+            {companies.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearAllCompanies}
+                disabled={syncing || loading}
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <Trash2 className="w-4 h-4 mr-1.5" />
+                Clear All ({companies.length})
+              </Button>
+            )}
 
             <Button
               variant="outline"
@@ -304,12 +418,12 @@ export default function CompaniesPage() {
 
             <Button
               size="sm"
-              onClick={handleSyncConnected}
+              onClick={handleRequestSyncPreview}
               disabled={syncing}
               className="bg-tc-blue hover:bg-blue-700 text-white font-medium"
             >
               <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "Syncing..." : "Sync from ProjectSight"}
+              {syncing ? "Checking..." : "Sync from ProjectSight"}
             </Button>
           </div>
         </div>
@@ -353,8 +467,29 @@ export default function CompaniesPage() {
             />
           </div>
 
-          <div className="text-xs text-slate-500 font-medium">
-            Showing {filteredCompanies.length} of {companies.length} companies
+          <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
+            <span>
+              Showing{" "}
+              {filteredCompanies.length === 0
+                ? 0
+                : (safePage - 1) * pageSize + 1}
+              –{Math.min(safePage * pageSize, filteredCompanies.length)} of{" "}
+              {filteredCompanies.length} companies
+              {filteredCompanies.length !== companies.length ? ` (${companies.length} total)` : ""}
+            </span>
+
+            <select
+              aria-label="Companies per page"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value) || 25)}
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -377,7 +512,7 @@ export default function CompaniesPage() {
                   : "No companies have been added or synced to this project yet."}
               </p>
               {!search && (
-                <Button onClick={handleSyncConnected} disabled={syncing} className="mt-2 bg-tc-blue text-white">
+                <Button onClick={handleRequestSyncPreview} disabled={syncing} className="mt-2 bg-tc-blue text-white">
                   <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
                   Sync Companies from ProjectSight
                 </Button>
@@ -385,7 +520,7 @@ export default function CompaniesPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-200">
-              {filteredCompanies.map((company) => {
+              {paginatedCompanies.map((company) => {
                 const isExpanded = expandedCompanyIds.has(company.id);
                 return (
                   <div key={company.id} className="transition-colors hover:bg-slate-50/70">
@@ -548,8 +683,149 @@ export default function CompaniesPage() {
               })}
             </div>
           )}
+
+          {/* Pagination Footer */}
+          {!loading && totalPages > 1 && (
+            <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3 flex items-center justify-between text-xs text-slate-600">
+              <span>
+                Page <strong>{safePage}</strong> of <strong>{totalPages}</strong> ({filteredCompanies.length} companies)
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="h-8 px-2.5 text-xs gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="h-8 px-2.5 text-xs gap-1"
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Sync Confirmation Dialog */}
+      <Dialog
+        open={Boolean(syncPreview)}
+        onOpenChange={(open) => {
+          if (!open) setSyncPreview(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-tc-blue" />
+              Confirm ProjectSight Company Import
+            </DialogTitle>
+            <DialogDescription>
+              Review the number of company records found in ProjectSight before importing them into this project.
+            </DialogDescription>
+          </DialogHeader>
+
+          {syncPreview && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="grid grid-cols-3 gap-2 text-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div>
+                  <span className="text-[10px] uppercase font-semibold text-slate-500 block">Found in PS</span>
+                  <span className="text-lg font-bold text-slate-900">{syncPreview.remoteCount}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-semibold text-slate-500 block">New to Add</span>
+                  <span className="text-lg font-bold text-tc-blue">+{syncPreview.addedCount}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-semibold text-slate-500 block">Total After</span>
+                  <span className="text-lg font-bold text-slate-900">{syncPreview.totalAfterSync}</span>
+                </div>
+              </div>
+
+              {syncPreview.addedCount > 50 && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">Large Portfolio Company Directory ({syncPreview.addedCount} records)</p>
+                    <p className="mt-0.5 text-[11px] text-amber-800">
+                      This import contains a large number of portfolio companies. We recommend importing them as untracked and enabling only the specific trade partners active on your bowling sheet.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {syncPreview.sampleNames.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-600 block">Sample Companies:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {syncPreview.sampleNames.map((name, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-[11px] font-normal">
+                        {name}
+                      </Badge>
+                    ))}
+                    {syncPreview.remoteCount > syncPreview.sampleNames.length && (
+                      <Badge variant="outline" className="text-[11px] text-slate-500">
+                        +{syncPreview.remoteCount - syncPreview.sampleNames.length} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
+                <div className="pr-3">
+                  <Label htmlFor="track-imported-switch" className="text-xs font-semibold text-slate-800 block cursor-pointer">
+                    Automatically track all imported companies on Bowling Sheet
+                  </Label>
+                  <span className="text-[11px] text-slate-500">
+                    {trackImportedByDefault
+                      ? `All ${syncPreview.addedCount} new companies will appear as rows on the Bowling Sheet`
+                      : "Companies will be saved to directory so you can toggle on only active trades"}
+                  </span>
+                </div>
+                <Switch
+                  id="track-imported-switch"
+                  checked={trackImportedByDefault}
+                  onCheckedChange={setTrackImportedByDefault}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSyncPreview(null)}
+              disabled={syncing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmSyncConnected}
+              disabled={syncing}
+              className="bg-tc-blue hover:bg-blue-700 text-white"
+            >
+              {syncing
+                ? "Importing..."
+                : `Confirm & Import ${syncPreview?.addedCount ?? 0} Companies`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Contact Dialog */}
       <Dialog

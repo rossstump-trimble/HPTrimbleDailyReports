@@ -50,6 +50,14 @@ export function projectSightBaseUrl(): string {
   ).replace(/\/+$/, '');
 }
 
+function safePsPathSegment(segment: string | number): string {
+  const clean = String(segment ?? '').trim();
+  if (!clean || clean.includes('/') || clean.includes('\\') || clean.includes('..')) {
+    throw new ProjectSightHttpError(400, 'Invalid ProjectSight identifier');
+  }
+  return encodeURIComponent(clean);
+}
+
 export function projectSightHeaders(accessToken: string): Record<string, string> {
   const header = (process.env.PROJECTSIGHT_AUTH_HEADER || 'Authorization').toLowerCase();
   if (header === 'x-ps-authorization') {
@@ -158,6 +166,32 @@ export async function listProjects(
   })).filter((row) => row.id);
 }
 
+export async function listProjectLocations(
+  accessToken: string,
+  portfolioId: string,
+  projectId: string,
+): Promise<ProjectSightRef[]> {
+  try {
+    const payload = await psFetch(
+      `${projectSightBaseUrl()}/${portfolioId}/${projectId}/locations`,
+      {
+        method: 'GET',
+        headers: projectSightHeaders(accessToken),
+      },
+    );
+    return items(payload)
+      .map((item) => ({
+        id: String(caseGet(item, ['LocationID', 'LocationId', 'Id', 'id']) || ''),
+        name: String(
+          caseGet(item, ['Name', 'Description', 'Path', 'Title', 'Location']) || '',
+        ).trim(),
+      }))
+      .filter((row) => row.name);
+  } catch {
+    return [];
+  }
+}
+
 export async function listDailyReports(
   accessToken: string,
   portfolioId: string,
@@ -194,6 +228,22 @@ export async function listCompanies(
   portfolioId: string,
   projectId?: string,
 ): Promise<Record<string, unknown>[]> {
+  if (projectId) {
+    try {
+      const payload = await psFetch(
+        `${projectSightBaseUrl()}/${portfolioId}/${projectId}/Companies`,
+        {
+          method: 'GET',
+          headers: projectSightHeaders(accessToken),
+        },
+      );
+      const result = items(payload);
+      if (result.length > 0) return result;
+    } catch {
+      // Fallback to portfolio level below
+    }
+  }
+
   // ProjectSight companies endpoint is at the portfolio level: /{portfolioId}/Companies
   // Response rows may include Contacts and Addresses arrays when the API returns them.
   try {
@@ -207,23 +257,9 @@ export async function listCompanies(
     const result = items(payload);
     if (result.length > 0) return result;
   } catch (err) {
-    console.warn('[projectsight] portfolio-level listCompanies failed, trying project level:', err);
+    console.warn('[projectsight] portfolio-level listCompanies failed:', err);
   }
 
-  if (projectId) {
-    try {
-      const payload = await psFetch(
-        `${projectSightBaseUrl()}/${portfolioId}/${projectId}/Companies`,
-        {
-          method: 'GET',
-          headers: projectSightHeaders(accessToken),
-        },
-      );
-      return items(payload);
-    } catch {
-      // fallback
-    }
-  }
   return [];
 }
 
@@ -597,12 +633,19 @@ export async function listChecklists(
             else if (rawStatus.toLowerCase() === 'none') result = 'Unchecked';
             else result = rawStatus;
 
+            const rawVal = caseGet(it, ['Comments', 'comment', 'Value']);
+            const valStr = typeof rawVal === 'string' ? rawVal.trim() : '';
+            const comment =
+              valStr && valStr.toLowerCase() !== 'true' && valStr.toLowerCase() !== 'false'
+                ? valStr
+                : undefined;
+
             return {
               id: String(caseGet(it, ['ChecklistItemID', 'ChecklistItemId', 'GUID', 'Id', 'id']) || `item-${itemIdx + 1}`),
               itemNumber: Number(caseGet(it, ['SortOrder', 'ItemNumber', 'itemNumber']) ?? itemIdx + 1),
               prompt: String(caseGet(it, ['Description', 'prompt', 'Value', 'value']) || `Item ${itemIdx + 1}`),
               result,
-              comment: (caseGet(it, ['Value', 'Comments', 'comment']) as string) || undefined,
+              comment,
             };
           })
         : [];
@@ -667,8 +710,10 @@ export async function updateChecklistItems(
       }
 
       // For ProjectSight Yes/No checklist items (ValueType 10), Value must be boolean string ("true"/"false") or null
-      if (it.comment) {
-        itemPayload.Value = it.comment;
+      const cleanComment = it.comment?.trim();
+      if (cleanComment && cleanComment.toLowerCase() !== 'true' && cleanComment.toLowerCase() !== 'false') {
+        itemPayload.Comments = cleanComment;
+        itemPayload.Value = cleanComment;
       } else if (isPass) {
         itemPayload.Value = 'true';
       } else if (isFail) {

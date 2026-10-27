@@ -14,6 +14,7 @@ describe("HPproto navigation", () => {
       "punch-list",
       "inspections",
       "daily-report",
+      "admin",
     ]);
   });
 

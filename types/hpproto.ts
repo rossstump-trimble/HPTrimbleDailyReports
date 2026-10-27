@@ -133,11 +133,20 @@ export interface BowlingMatrix {
   }[];
 }
 
+export interface AccessControlConfig {
+  allowedDomains: string[];
+  allowedEmails: string[];
+  adminEmails: string[];
+  allowPasskeyLogin: boolean;
+  updatedAt?: string;
+}
+
 export interface StoreData {
   projects: Project[];
   dailyReports: DailyReport[];
   punchItems?: PunchItem[];
   inspections?: InspectionRecord[];
+  accessControl?: AccessControlConfig;
 }
 
 export const MAX_DAILY_REPORTS = 2000;

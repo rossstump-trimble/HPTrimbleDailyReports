@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   ListTodo,
   QrCode,
+  ShieldCheck,
   Sparkles,
   TableProperties,
 } from "lucide-react";
@@ -86,6 +87,13 @@ export function getNavigationItemsForProject(projectId: string = "1025"): MenuIt
       icon: QrCode,
       path: `/intake/${projectId}`,
       order: 25,
+    },
+    {
+      id: "admin",
+      name: "Admin Controls",
+      icon: ShieldCheck,
+      path: "/admin",
+      order: 30,
     },
   ];
 }

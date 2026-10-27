@@ -39,6 +39,8 @@ export default function PunchListPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [importanceFilter, setImportanceFilter] = useState<string>("all");
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -100,6 +102,13 @@ export default function PunchListPage() {
 
     return matchesSearch && matchesStatus && matchesImportance;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedItems = filteredItems.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   const totalCount = items.length;
   const openCount = items.filter((i) => i.status === "open" || i.status === "reopened").length;
@@ -267,7 +276,7 @@ export default function PunchListPage() {
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                paginatedItems.map((item) => {
                   const isResolved = item.status === "resolved" || item.status === "closed";
                   const isHighPriority = item.importance === "high" || item.importance === "urgent";
 
@@ -356,6 +365,36 @@ export default function PunchListPage() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="border-t border-border bg-muted/20 px-4 py-2.5 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Page <strong className="text-foreground">{safePage}</strong> of{" "}
+              <strong className="text-foreground">{totalPages}</strong> ({filteredItems.length} items)
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="h-7 px-2 text-xs"
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="h-7 px-2 text-xs"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Punch Scan Modal */}

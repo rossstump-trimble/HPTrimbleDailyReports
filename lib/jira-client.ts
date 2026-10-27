@@ -15,14 +15,13 @@ export function getJiraConfig(): JiraConfig | null {
     process.env.JIRA_BASE_URL ||
     "https://jira.trimble.tools"
   ).replace(/\/+$/, "");
-  const email = process.env.JIRA_EMAIL || "ross_stump@trimble.com";
-  const apiToken =
-    process.env.JIRA_API_TOKEN || "AtnMKsbHQK170SMcUUftijkEJtBiAtV0fkn50L";
+  const email = (process.env.JIRA_EMAIL || "").trim();
+  const apiToken = (process.env.JIRA_API_TOKEN || "").trim();
   const projectKey =
     process.env.JIRA_PROJECT_KEY || process.env.JIRA_PROJECT || "SCHED";
   const issueType = process.env.JIRA_ISSUE_TYPE || "Bug";
 
-  if (!baseUrl || !apiToken) return null;
+  if (!baseUrl || !email || !apiToken) return null;
   return { baseUrl, email, apiToken, projectKey, issueType };
 }
 
@@ -107,14 +106,19 @@ export async function createJiraIssueFromFeedback(task: {
     const issueKey = created.key;
     const issueUrl = `${config.baseUrl}/browse/${issueKey}`;
 
-    // Upload screenshot attachments if present
+    const allowedRoot = path.resolve(process.cwd(), "data", "feedback_attachments");
+
+    // Upload screenshot attachments if present and within allowed directory
     if (task.annotations) {
       for (const ann of task.annotations) {
-        if (ann.screenshot_path && fs.existsSync(ann.screenshot_path)) {
-          try {
-            await attachScreenshotToJiraIssue(config, issueKey, ann.screenshot_path);
-          } catch (attErr) {
-            console.error(`[Jira attach failed for ${ann.screenshot_path}]`, attErr);
+        if (ann.screenshot_path) {
+          const resolvedPath = path.resolve(ann.screenshot_path);
+          if (resolvedPath.startsWith(allowedRoot + path.sep) && fs.existsSync(resolvedPath)) {
+            try {
+              await attachScreenshotToJiraIssue(config, issueKey, resolvedPath);
+            } catch (attErr) {
+              console.error(`[Jira attach failed for ${resolvedPath}]`, attErr);
+            }
           }
         }
       }

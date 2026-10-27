@@ -335,11 +335,13 @@ export default function DailyConfirmCard({
   const suggestions = useMemo(() => {
     const q = comboboxQuery.trim().toLowerCase();
     if (!q) return tradePartners.slice(0, 8);
-    return tradePartners.filter(
-      (tp) =>
-        tp.name.toLowerCase().includes(q) ||
-        (tp.category || "").toLowerCase().includes(q),
-    );
+    return tradePartners
+      .filter(
+        (tp) =>
+          tp.name.toLowerCase().includes(q) ||
+          (tp.category || "").toLowerCase().includes(q),
+      )
+      .slice(0, 30);
   }, [comboboxQuery, tradePartners]);
 
   return (
@@ -411,7 +413,7 @@ export default function DailyConfirmCard({
           )}
 
           {/* Fallback Direct Dropdown */}
-          {tradePartners.length > 0 && (
+          {tradePartners.length > 0 && tradePartners.length <= 200 && (
             <select
               value={matchedPartner ? matchedPartner.id : ""}
               onChange={(e) => {

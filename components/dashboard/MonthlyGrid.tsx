@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GRID_CELL_COLORS } from "@/lib/dashboard/statusMeta";
 import type { DashboardCell, DashboardPayload, DashboardTradePartner } from "@/lib/dashboard/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { StatusLegend } from "./StatusLegend";
 
 function formatLongDate(iso: string): string {
@@ -103,6 +104,8 @@ function GridCell({
   );
 }
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
 export function MonthlyGrid({
   data,
   onDeleteCompany,
@@ -111,6 +114,8 @@ export function MonthlyGrid({
   onDeleteCompany?: (companyId: string, companyName?: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const days = Array.from({ length: data.daysInMonth }, (_, i) => i + 1);
 
   const filtered = useMemo(() => {
@@ -123,17 +128,48 @@ export function MonthlyGrid({
     );
   }, [data.rows, query]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [query, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, safePage, pageSize]);
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StatusLegend />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter trades…"
-          className="h-8 w-48 rounded-md border border-input bg-background px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <div className="flex items-center gap-2.5">
+          {filtered.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of{" "}
+              {filtered.length}
+            </span>
+          )}
+          <select
+            aria-label="Rows per page"
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value) || 25)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size} / page
+              </option>
+            ))}
+          </select>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter trades…"
+            className="h-8 w-48 rounded-md border border-input bg-background px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
       </div>
 
       <TooltipProvider delayDuration={200}>
@@ -181,7 +217,7 @@ export function MonthlyGrid({
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {paginatedRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={data.daysInMonth + 3}
@@ -191,7 +227,7 @@ export function MonthlyGrid({
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                paginatedRows.map((row) => (
                   <tr key={row.trade.id} className="border-b border-border/70 last:border-b-0 group/row">
                     <th
                       className="sticky left-0 z-20 bg-card text-left px-3 py-2 border-r border-border font-medium"
@@ -234,6 +270,39 @@ export function MonthlyGrid({
           </table>
         </div>
       </TooltipProvider>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+          <span>
+            Page <strong className="text-foreground">{safePage}</strong> of{" "}
+            <strong className="text-foreground">{totalPages}</strong> ({filtered.length} trade partners)
+          </span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-7 px-2 text-xs gap-1"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="h-7 px-2 text-xs gap-1"
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <p className="text-[11px] text-muted-foreground">
         Hover a cell for status and manpower / hours. Grey is not on site or still ahead of {data.asOfDate}. Amber means the trade turned it in — HP has not logged it in Project Sight.

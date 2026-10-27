@@ -20,6 +20,9 @@ export function InspectionGrid({
   onScanChecklist,
   selectedId,
 }: InspectionGridProps) {
+  const [page, setPage] = React.useState(1);
+  const PAGE_SIZE = 25;
+
   if (inspections.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center border rounded-xl bg-card">
@@ -31,6 +34,13 @@ export function InspectionGrid({
       </div>
     );
   }
+
+  const totalPages = Math.max(1, Math.ceil(inspections.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedInspections = inspections.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   return (
     <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
@@ -47,7 +57,7 @@ export function InspectionGrid({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {inspections.map((record) => {
+          {paginatedInspections.map((record) => {
             const isSelected = record.id === selectedId;
             const items = record.items || [];
             const passed = items.filter((it) => it.result === 'Pass').length;
@@ -110,6 +120,36 @@ export function InspectionGrid({
           })}
         </TableBody>
       </Table>
+      {totalPages > 1 && (
+        <div className="border-t border-border bg-muted/20 px-4 py-2.5 flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            Page <strong className="text-foreground">{safePage}</strong> of{" "}
+            <strong className="text-foreground">{totalPages}</strong> ({inspections.length} checklists)
+          </span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-7 px-2 text-xs"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="h-7 px-2 text-xs"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

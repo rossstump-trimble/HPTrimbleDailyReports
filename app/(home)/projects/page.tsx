@@ -1,13 +1,32 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, LayoutDashboard, TableProperties, Plus, AlertCircle, Building2, ClipboardCheck, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  LayoutDashboard,
+  TableProperties,
+  Plus,
+  AlertCircle,
+  ClipboardCheck,
+  Trash2,
+  Star,
+  CheckCircle2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import QrCodeView from "@/components/common/QrCodeView";
 import NewProjectModal from "@/components/projects/NewProjectModal";
+import {
+  ACTIVE_PROJECT_EVENT,
+  clearRememberedProjectIfMatches,
+  getDefaultProjectId,
+  getLastSelectedProjectId,
+  resolveActiveProjectId,
+  setDefaultProjectId,
+  setLastSelectedProjectId,
+} from "@/lib/active-project";
 import type { Project } from "@/types/hpproto";
 
 function getIntakeUrl(projectId: string): string {
@@ -30,6 +49,11 @@ export default function ProjectsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  const [lastProjectId, setLastProjectIdState] = useState<string | null>(null);
+  const [defaultProjectId, setDefaultProjectIdState] = useState<string | null>(null);
 
   const loadProjects = () => {
     fetch("/api/projects")
@@ -44,10 +68,62 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadProjects();
+    setLastProjectIdState(getLastSelectedProjectId());
+    setDefaultProjectIdState(getDefaultProjectId());
+
+    const handleSync = () => {
+      setLastProjectIdState(getLastSelectedProjectId());
+      setDefaultProjectIdState(getDefaultProjectId());
+    };
+
+    window.addEventListener(ACTIVE_PROJECT_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      window.removeEventListener(ACTIVE_PROJECT_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, []);
+
+  const activeMenuProjectId = resolveActiveProjectId({
+    pathname: "/projects",
+    lastProjectId,
+    defaultProjectId,
+    fallback: projects[0]?.id || "1025",
+  });
+
+  const sortedProjects = useMemo(() => {
+    return [...projects].sort((a, b) => {
+      const aDefault = defaultProjectId?.toLowerCase() === a.id.toLowerCase() ? 1 : 0;
+      const bDefault = defaultProjectId?.toLowerCase() === b.id.toLowerCase() ? 1 : 0;
+      if (aDefault !== bDefault) return bDefault - aDefault;
+
+      const aActive = activeMenuProjectId.toLowerCase() === a.id.toLowerCase() ? 1 : 0;
+      const bActive = activeMenuProjectId.toLowerCase() === b.id.toLowerCase() ? 1 : 0;
+      return bActive - aActive;
+    });
+  }, [projects, defaultProjectId, activeMenuProjectId]);
 
   const handleProjectCreated = (newProj: Project) => {
     setProjects((prev) => [newProj, ...prev]);
+    setLastSelectedProjectId(newProj.id);
+    setLastProjectIdState(newProj.id);
+  };
+
+  const handleNavigateToProject = (projectId: string, subRoute: string) => {
+    setLastSelectedProjectId(projectId);
+    setLastProjectIdState(projectId);
+    router.push(`/projects/${projectId}/${subRoute}`);
+  };
+
+  const handleToggleDefaultProject = (projectId: string) => {
+    const isCurrentlyDefault =
+      defaultProjectId?.toLowerCase() === projectId.toLowerCase();
+    const nextDefault = isCurrentlyDefault ? null : projectId;
+    setDefaultProjectId(nextDefault);
+    setDefaultProjectIdState(nextDefault);
+    if (nextDefault) {
+      setLastProjectIdState(nextDefault);
+    }
   };
 
   const handleDeleteProject = async (projectId: string, projectName: string) => {
@@ -62,6 +138,7 @@ export default function ProjectsPage() {
         const json = await res.json().catch(() => ({}));
         throw new Error(json.error || "Failed to delete project");
       }
+      clearRememberedProjectIfMatches(projectId);
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to delete project");
@@ -98,7 +175,7 @@ export default function ProjectsPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Projects</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Select a project to view its master bowling sheet or share the QR intake link with trade partners.
+            Select a project to view its master bowling sheet, set your default project (★), or share the QR intake link with trade partners.
           </p>
         </div>
 
@@ -116,18 +193,44 @@ export default function ProjectsPage() {
 
       {/* Project Cards Grid - Wider 2-column grid for spacious buttons */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {projects.map((project) => {
+        {sortedProjects
+          .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+          .map((project) => {
           const intakeUrl = getIntakeUrl(project.id);
           const hpIntakeUrl = `${getIntakeUrl(project.id)}/hp`;
+          const isDefault =
+            defaultProjectId?.toLowerCase() === project.id.toLowerCase();
+          const isActiveInMenu =
+            activeMenuProjectId.toLowerCase() === project.id.toLowerCase();
+
           return (
-            <Card key={project.id} className="flex flex-col shadow-sm border-border">
+            <Card
+              key={project.id}
+              className={`flex flex-col shadow-sm transition-colors ${
+                isActiveInMenu
+                  ? "border-[#0063a3] ring-1 ring-[#0063a3]/20"
+                  : "border-border"
+              }`}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <Badge variant="outline" className="font-mono text-xs font-semibold">
                         {project.code || project.id.toUpperCase()}
                       </Badge>
+                      {isDefault && (
+                        <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-400/40 hover:bg-amber-500/20 text-[10px] font-semibold gap-1 px-2 py-0">
+                          <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+                          Default Project
+                        </Badge>
+                      )}
+                      {isActiveInMenu && (
+                        <Badge variant="secondary" className="text-[10px] font-semibold gap-1 px-2 py-0 bg-blue-50 text-[#0063a3] dark:bg-blue-950/50 dark:text-blue-300">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Active in Menu
+                        </Badge>
+                      )}
                       {project.workingDays && (
                         <span className="text-xs text-muted-foreground">
                           {project.workingDays.length} working days / week
@@ -139,15 +242,33 @@ export default function ProjectsPage() {
                     </h2>
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                    onClick={() => handleDeleteProject(project.id, project.name)}
-                    aria-label={`Delete project ${project.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-8 px-2 text-xs gap-1 ${
+                        isDefault
+                          ? "text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                          : "text-muted-foreground hover:text-amber-600"
+                      }`}
+                      onClick={() => handleToggleDefaultProject(project.id)}
+                      title={isDefault ? "Remove as default project" : "Set as your default project"}
+                      aria-label={isDefault ? `Unset ${project.name} as default` : `Set ${project.name} as default`}
+                    >
+                      <Star className={`h-4 w-4 ${isDefault ? "fill-amber-400 text-amber-500" : ""}`} />
+                      <span className="hidden sm:inline">{isDefault ? "Default" : "Set Default"}</span>
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                      onClick={() => handleDeleteProject(project.id, project.name)}
+                      aria-label={`Delete project ${project.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
 
@@ -217,7 +338,7 @@ export default function ProjectsPage() {
                   variant="outline"
                   className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-2 py-2.5 h-10"
                   size="sm"
-                  onClick={() => router.push(`/projects/${project.id}/dashboard`)}
+                  onClick={() => handleNavigateToProject(project.id, "dashboard")}
                 >
                   <LayoutDashboard className="h-4 w-4 shrink-0" />
                   <span>Dashboard</span>
@@ -226,7 +347,7 @@ export default function ProjectsPage() {
                   variant="outline"
                   className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-2 py-2.5 h-10"
                   size="sm"
-                  onClick={() => router.push(`/projects/${project.id}/bowling`)}
+                  onClick={() => handleNavigateToProject(project.id, "bowling")}
                 >
                   <TableProperties className="h-4 w-4 shrink-0" />
                   <span>Bowling Sheet</span>
@@ -234,7 +355,7 @@ export default function ProjectsPage() {
                 <Button
                   className="w-full flex items-center justify-center gap-1.5 text-xs font-bold px-2 py-2.5 h-10 shadow-sm"
                   size="sm"
-                  onClick={() => router.push(`/projects/${project.id}/review`)}
+                  onClick={() => handleNavigateToProject(project.id, "review")}
                 >
                   <ClipboardCheck className="h-4 w-4 shrink-0" />
                   <span>Review Queue</span>
@@ -244,6 +365,37 @@ export default function ProjectsPage() {
           );
         })}
       </div>
+
+      {projects.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
+          <span>
+            Page <strong className="text-foreground">{page}</strong> of{" "}
+            <strong className="text-foreground">{Math.ceil(projects.length / PAGE_SIZE)}</strong> ({projects.length} projects)
+          </span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-8 px-2.5 text-xs"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={page >= Math.ceil(projects.length / PAGE_SIZE)}
+              onClick={() => setPage((p) => Math.min(Math.ceil(projects.length / PAGE_SIZE), p + 1))}
+              className="h-8 px-2.5 text-xs"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       <NewProjectModal
         open={newProjectModalOpen}

@@ -64,6 +64,8 @@ export default function ReviewQueuePage() {
   const [companies, setCompanies] = useState<ProjectCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<"pending" | "approved" | "all">("pending");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedReport, setSelectedReport] = useState<DailyReport | null>(null);
@@ -218,6 +220,12 @@ export default function ReviewQueuePage() {
     if (filterTab === "approved") return r.approvalStatus === "approved";
     return true;
   });
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedReports = filteredReports.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -334,7 +342,10 @@ export default function ReviewQueuePage() {
         <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
           <Tabs
             value={filterTab}
-            onValueChange={(val) => setFilterTab(val as "pending" | "approved" | "all")}
+            onValueChange={(val) => {
+              setFilterTab(val as "pending" | "approved" | "all");
+              setPage(1);
+            }}
           >
             <TabsList className="bg-muted/60 p-1 rounded-xl">
               <TabsTrigger value="pending" className="text-xs gap-1.5 rounded-lg">
@@ -378,7 +389,7 @@ export default function ReviewQueuePage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredReports.map((report) => {
+            {paginatedReports.map((report) => {
               const isApproved = report.approvalStatus === "approved" || Boolean(report.projectSightDailyId);
               const isApproving = approvingId === report.id;
               const { company, isVerified } = getMatchingCompanyAndVerification(report);
@@ -609,6 +620,37 @@ export default function ReviewQueuePage() {
                 </Card>
               );
             })}
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
+                <span>
+                  Page <strong className="text-foreground">{safePage}</strong> of{" "}
+                  <strong className="text-foreground">{totalPages}</strong> ({filteredReports.length} reports)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={safePage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -657,12 +699,19 @@ export default function ReviewQueuePage() {
                   <Input
                     type="number"
                     value={selectedReport.workerCount}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const nextWorkers = Number(e.target.value) || 0;
+                      const hpp =
+                        selectedReport.workerCount > 0 && selectedReport.totalHours > 0
+                          ? Math.round((selectedReport.totalHours / selectedReport.workerCount) * 10) / 10
+                          : 8;
                       setSelectedReport({
                         ...selectedReport,
-                        workerCount: Number(e.target.value) || 0,
-                      })
-                    }
+                        workerCount: nextWorkers,
+                        totalHours: Math.round(nextWorkers * hpp * 10) / 10,
+                        crewBreakdown: [],
+                      });
+                    }}
                     className="text-xs"
                   />
                 </div>
@@ -681,6 +730,7 @@ export default function ReviewQueuePage() {
                       setSelectedReport({
                         ...selectedReport,
                         totalHours: Math.round(hpp * workers * 10) / 10,
+                        crewBreakdown: [],
                       });
                     }}
                     className="text-xs"

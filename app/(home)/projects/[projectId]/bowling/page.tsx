@@ -84,6 +84,15 @@ export default function BowlingPage() {
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyCategory, setNewCompanyCategory] = useState("");
   const [differentProjectId, setDifferentProjectId] = useState("");
+  const [pendingSyncPreview, setPendingSyncPreview] = useState<{
+    remoteCount: number;
+    addedCount: number;
+    totalAfterSync: number;
+    customSourceId?: string;
+    trackImported: boolean;
+  } | null>(null);
+  const [activeCompanyPage, setActiveCompanyPage] = useState(1);
+  const ACTIVE_COMPANY_PAGE_SIZE = 20;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -143,15 +152,22 @@ export default function BowlingPage() {
   };
 
   // Company management handlers
-  const handleSyncConnectedCompanies = async (customSourceId?: string) => {
+  const handleSyncConnectedCompanies = async (customSourceId?: string, confirmed = false) => {
     setSyncingCompanies(true);
     setCompanyFeedback(null);
     try {
-      const payload: { action: string; sourceProjectId?: string } = {
-        action: "sync-connected",
+      const payload: {
+        action: string;
+        sourceProjectId?: string;
+        trackImported?: boolean;
+      } = {
+        action: confirmed ? "sync-connected" : "preview-sync-connected",
       };
       if (customSourceId?.trim()) {
         payload.sourceProjectId = customSourceId.trim();
+      }
+      if (confirmed && pendingSyncPreview) {
+        payload.trackImported = pendingSyncPreview.trackImported;
       }
 
       const res = await fetch(`/api/projects/${projectId}/companies`, {
@@ -176,6 +192,19 @@ export default function BowlingPage() {
         return;
       }
 
+      if (!confirmed && body.preview) {
+        const addedCount = Number(body.addedCount ?? 0);
+        setPendingSyncPreview({
+          remoteCount: Number(body.remoteCount ?? 0),
+          addedCount,
+          totalAfterSync: Number(body.totalAfterSync ?? 0),
+          customSourceId: customSourceId?.trim() || undefined,
+          trackImported: addedCount <= 50,
+        });
+        return;
+      }
+
+      setPendingSyncPreview(null);
       setCompanyFeedback({
         type: "success",
         text: body.message || `Loaded ${body.count} companies into bowling sheet.`,
@@ -639,36 +668,128 @@ export default function BowlingPage() {
                   No companies in this project yet. Load from ProjectSight or add one below.
                 </p>
               ) : (
-                <div className="max-h-48 overflow-y-auto divide-y divide-border/60 rounded-md border border-border/60 bg-background">
-                  {data.rows.map((r) => (
-                    <div
-                      key={r.tradePartner.id}
-                      className="flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/30 transition-colors"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <span className="font-semibold text-foreground block truncate">
-                          {r.tradePartner.name}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground block truncate">
-                          {r.tradePartner.category || "Trade Partner"}
-                        </span>
+                <>
+                  <div className="max-h-48 overflow-y-auto divide-y divide-border/60 rounded-md border border-border/60 bg-background">
+                    {data.rows
+                      .slice(
+                        (activeCompanyPage - 1) * ACTIVE_COMPANY_PAGE_SIZE,
+                        activeCompanyPage * ACTIVE_COMPANY_PAGE_SIZE,
+                      )
+                      .map((r) => (
+                        <div
+                          key={r.tradePartner.id}
+                          className="flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <span className="font-semibold text-foreground block truncate">
+                              {r.tradePartner.name}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground block truncate">
+                              {r.tradePartner.category || "Trade Partner"}
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 shrink-0"
+                            onClick={() => handleDeleteCompany(r.tradePartner.id, r.tradePartner.name)}
+                            disabled={syncingCompanies}
+                            title={`Delete ${r.tradePartner.name}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                  </div>
+                  {data.rows.length > ACTIVE_COMPANY_PAGE_SIZE && (
+                    <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+                      <span>
+                        Page {activeCompanyPage} of {Math.ceil(data.rows.length / ACTIVE_COMPANY_PAGE_SIZE)}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[11px]"
+                          disabled={activeCompanyPage <= 1}
+                          onClick={() => setActiveCompanyPage((p) => Math.max(1, p - 1))}
+                        >
+                          Prev
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[11px]"
+                          disabled={activeCompanyPage >= Math.ceil(data.rows.length / ACTIVE_COMPANY_PAGE_SIZE)}
+                          onClick={() =>
+                            setActiveCompanyPage((p) =>
+                              Math.min(Math.ceil(data.rows.length / ACTIVE_COMPANY_PAGE_SIZE), p + 1),
+                            )
+                          }
+                        >
+                          Next
+                        </Button>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 shrink-0"
-                        onClick={() => handleDeleteCompany(r.tradePartner.id, r.tradePartner.name)}
-                        disabled={syncingCompanies}
-                        title={`Delete ${r.tradePartner.name}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
+
+            {pendingSyncPreview && (
+              <div className="border border-amber-300 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 rounded-lg p-3 space-y-2.5 text-xs">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1 flex-1">
+                    <p className="font-semibold text-amber-950 dark:text-amber-200">
+                      Confirm Company Import: {pendingSyncPreview.addedCount} new record(s) found
+                    </p>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                      ProjectSight returned {pendingSyncPreview.remoteCount} companies ({pendingSyncPreview.totalAfterSync} total after sync).
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-[11px] font-medium text-amber-950 dark:text-amber-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pendingSyncPreview.trackImported}
+                    onChange={(e) =>
+                      setPendingSyncPreview((prev) =>
+                        prev ? { ...prev, trackImported: e.target.checked } : null,
+                      )
+                    }
+                    className="rounded border-amber-400"
+                  />
+                  <span>Add all {pendingSyncPreview.addedCount} imported companies directly to Bowling Sheet rows</span>
+                </label>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={syncingCompanies}
+                    onClick={() => setPendingSyncPreview(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 text-xs bg-[#0063a3] hover:bg-[#005187] text-white"
+                    disabled={syncingCompanies}
+                    onClick={() => handleSyncConnectedCompanies(pendingSyncPreview.customSourceId, true)}
+                  >
+                    {syncingCompanies
+                      ? "Importing..."
+                      : `Confirm Import (${pendingSyncPreview.addedCount})`}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Action 1: Load from Connected Project */}
             <div className="border border-border rounded-lg p-3 bg-muted/20 space-y-2">

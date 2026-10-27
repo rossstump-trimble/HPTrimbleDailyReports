@@ -29,13 +29,58 @@ export async function GET(
     if (!project) {
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
-    const companies = getProjectCompanies(projectId);
+    const { searchParams } = new URL(req.url);
+    const search = (searchParams.get('search') || '').trim().toLowerCase();
+    const pageParam = searchParams.get('page');
+    const pageSizeParam = searchParams.get('pageSize');
+
+    const allCompanies = getProjectCompanies(projectId);
+    const trackedCount = allCompanies.filter((c) => c.isTracked).length;
+
+    let filtered = allCompanies;
+    if (search) {
+      filtered = allCompanies.filter(
+        (c) =>
+          c.name.toLowerCase().includes(search) ||
+          (c.trade || '').toLowerCase().includes(search) ||
+          c.contacts.some(
+            (ct) =>
+              ct.displayName.toLowerCase().includes(search) ||
+              (ct.email || '').toLowerCase().includes(search),
+          ),
+      );
+    }
+
+    if (pageParam != null || pageSizeParam != null) {
+      const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
+      const pageSize = Math.min(200, Math.max(1, parseInt(pageSizeParam || '50', 10) || 50));
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const safePage = Math.min(page, totalPages);
+      const start = (safePage - 1) * pageSize;
+      const pagedCompanies = filtered.slice(start, start + pageSize);
+
+      return NextResponse.json({
+        success: true,
+        projectId,
+        count: allCompanies.length,
+        filteredCount: total,
+        page: safePage,
+        pageSize,
+        totalPages,
+        companies: pagedCompanies,
+        trackedCount,
+        tradePartners: project.tradePartners || [],
+      });
+    }
+
     return NextResponse.json({
       success: true,
       projectId,
-      count: companies.length,
-      companies,
-      trackedCount: companies.filter((c) => c.isTracked).length,
+      count: allCompanies.length,
+      filteredCount: filtered.length,
+      companies: filtered,
+      trackedCount,
       tradePartners: project.tradePartners || [],
     });
   } catch (err) {
@@ -56,7 +101,7 @@ export async function POST(
     }
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: 'sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete' | 'toggle-tracking';
+      action?: 'sync-connected' | 'preview-sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete' | 'toggle-tracking';
       sourceProjectId?: string;
       sourcePortfolioId?: string;
       name?: string;
@@ -66,6 +111,7 @@ export async function POST(
       id?: string;
       purgeReports?: boolean;
       isTracked?: boolean;
+      trackImported?: boolean;
     };
 
     const action = body.action || 'sync-connected';
@@ -188,13 +234,13 @@ export async function POST(
       });
     }
 
-    // Action 4: Sync from connected ProjectSight project
-    if (action === 'sync-connected') {
+    // Action 4: Sync or Preview Sync from connected ProjectSight project
+    if (action === 'sync-connected' || action === 'preview-sync-connected') {
       const jar = cookies();
       const token = tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
       const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
-      const psPortfolioId = body.sourcePortfolioId || dest.portfolioId || project.psPortfolioId || DEFAULT_DESTINATION.portfolioId;
-      const psProjectId = body.sourceProjectId || dest.projectId || project.psProjectId || DEFAULT_DESTINATION.projectId;
+      const psPortfolioId = body.sourcePortfolioId || project.psPortfolioId || dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
+      const psProjectId = body.sourceProjectId || project.psProjectId || dest.projectId || DEFAULT_DESTINATION.projectId;
 
       if (!token) {
         // Fallback for local development without Trimble Identity: check other projects
@@ -220,7 +266,9 @@ export async function POST(
       const nameMap = new Map(currentCompanies.map((c) => [c.name.toLowerCase(), c]));
 
       let addedCount = 0;
+      let existingMatchCount = 0;
       const updatedList: ProjectCompany[] = [];
+      const seenIncomingIds = new Set<string>();
 
       for (const raw of rawCompanies) {
         const compName = String(
@@ -228,31 +276,36 @@ export async function POST(
         ).trim();
         if (!compName) continue;
         const compId = slugTradePartnerId(compName);
+        if (seenIncomingIds.has(compId.toLowerCase())) continue;
+        seenIncomingIds.add(compId.toLowerCase());
+
         const psCompId = Number(raw.CompanyID || raw.CompanyId || raw.Id || raw.id) || undefined;
         const cat = String(raw.Trade || raw.Category || raw.Type || 'Trade Partner').trim();
 
         const rawContacts = Array.isArray(raw.Contacts) ? raw.Contacts : [];
         const contacts: CompanyContact[] = rawContacts
-          .map((c: any) => {
+          .map((c: unknown) => {
             if (!c || typeof c !== 'object') return null;
-            const firstName = String(c.FirstName || c.firstName || '').trim();
-            const lastName = String(c.LastName || c.lastName || '').trim();
-            const displayName = String(c.DisplayName || c.displayName || `${firstName} ${lastName}`).trim();
-            const cid = String(c.ContactID || c.ContactId || c.Id || c.id || slugTradePartnerId(displayName || 'contact'));
+            const rec = c as Record<string, unknown>;
+            const firstName = String(rec.FirstName || rec.firstName || '').trim();
+            const lastName = String(rec.LastName || rec.lastName || '').trim();
+            const displayName = String(rec.DisplayName || rec.displayName || `${firstName} ${lastName}`).trim();
+            const cid = String(rec.ContactID || rec.ContactId || rec.Id || rec.id || slugTradePartnerId(displayName || 'contact'));
             return {
               id: cid,
               firstName,
               lastName,
               displayName: displayName || `${firstName} ${lastName}`.trim(),
-              email: String(c.EMail || c.Email || c.email || '').trim() || undefined,
-              title: String(c.Title || c.title || '').trim() || undefined,
-              phone: String(c.Tel || c.Phone || c.phone || '').trim() || undefined,
+              email: String(rec.EMail || rec.Email || rec.email || '').trim() || undefined,
+              title: String(rec.Title || rec.title || '').trim() || undefined,
+              phone: String(rec.Tel || rec.Phone || rec.phone || '').trim() || undefined,
             } as CompanyContact;
           })
           .filter(Boolean) as CompanyContact[];
 
         const existing = existingMap.get(compId.toLowerCase()) || nameMap.get(compName.toLowerCase());
         if (existing) {
+          existingMatchCount++;
           const mergedContacts = [...existing.contacts];
           for (const newC of contacts) {
             const hasMatch = mergedContacts.some(
@@ -277,23 +330,40 @@ export async function POST(
             excludedSet.has(compId.toLowerCase()) ||
             excludedSet.has(compName.toLowerCase()) ||
             excludedSet.has(slugTradePartnerId(compName));
+          const shouldTrack = body.trackImported !== undefined ? Boolean(body.trackImported) : !isExcluded;
 
           updatedList.push({
             id: compId,
             psCompanyId: psCompId,
             name: compName,
             trade: cat || 'Trade Partner',
-            isTracked: !isExcluded,
+            isTracked: shouldTrack,
             contacts,
           });
         }
       }
 
+      const updatedIds = new Set(updatedList.map((u) => u.id.toLowerCase()));
       // Preserve existing companies not returned in this PS sync
       for (const comp of currentCompanies) {
-        if (!updatedList.some((u) => u.id.toLowerCase() === comp.id.toLowerCase())) {
+        if (!updatedIds.has(comp.id.toLowerCase())) {
           updatedList.push(comp);
+          updatedIds.add(comp.id.toLowerCase());
         }
+      }
+
+      if (action === 'preview-sync-connected') {
+        return NextResponse.json({
+          success: true,
+          preview: true,
+          remoteCount: seenIncomingIds.size,
+          addedCount,
+          existingMatchCount,
+          currentCount: currentCompanies.length,
+          totalAfterSync: updatedList.length,
+          sampleNames: updatedList.slice(0, 8).map((c) => c.name),
+          message: `Found ${seenIncomingIds.size} company record(s) in ProjectSight (${addedCount} new to add, ${existingMatchCount} already in project).`,
+        });
       }
 
       setProjectCompanies(projectId, updatedList);

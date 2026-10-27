@@ -1,10 +1,18 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "../ui/scroll-area";
 import { getSortedNavigationData, MenuItem } from "@/lib/projectsight/navigationData";
+import {
+  ACTIVE_PROJECT_EVENT,
+  extractProjectIdFromPath,
+  getDefaultProjectId,
+  getLastSelectedProjectId,
+  resolveActiveProjectId,
+  setLastSelectedProjectId,
+} from "@/lib/active-project";
 
 interface ProjectSightNavigationProps {
   isExpanded: boolean;
@@ -26,8 +34,42 @@ export default function ProjectSightNavigation({
   className,
 }: ProjectSightNavigationProps) {
   const pathname = usePathname();
-  const projectMatch = pathname.match(/\/projects\/([^/]+)/) || pathname.match(/\/intake\/([^/]+)/);
-  const activeProjectId = projectMatch ? projectMatch[1] : "1025";
+  const pathProjectId = extractProjectIdFromPath(pathname);
+
+  const [lastProjectId, setLastProjectIdState] = useState<string | null>(null);
+  const [defaultProjectId, setDefaultProjectIdState] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLastProjectIdState(getLastSelectedProjectId());
+    setDefaultProjectIdState(getDefaultProjectId());
+
+    const handleSync = () => {
+      setLastProjectIdState(getLastSelectedProjectId());
+      setDefaultProjectIdState(getDefaultProjectId());
+    };
+
+    window.addEventListener(ACTIVE_PROJECT_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      window.removeEventListener(ACTIVE_PROJECT_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pathProjectId) {
+      setLastProjectIdState(pathProjectId);
+      setLastSelectedProjectId(pathProjectId);
+    }
+  }, [pathProjectId]);
+
+  const activeProjectId = resolveActiveProjectId({
+    pathname,
+    lastProjectId,
+    defaultProjectId,
+    fallback: "1025",
+  });
+
   const menuItems = getSortedNavigationData(activeProjectId);
 
   const renderMenuItem = (item: MenuItem) => {

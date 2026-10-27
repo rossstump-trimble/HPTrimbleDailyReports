@@ -559,4 +559,40 @@ describe('HPproto Local Store', () => {
     const updated = updateInspectionRecord('insp-1', { status: 'approved' }, TEST_DB_PATH);
     expect(updated?.status).toBe('approved');
   });
+
+  it('preserves other projects punchItems and inspections when deleting a project', () => {
+    const p2 = createProject({ name: 'Second Project', code: 'SEC' }, TEST_DB_PATH);
+    saveInspectionRecord(
+      {
+        id: 'insp-keep',
+        projectId: '1025',
+        number: 'CK-001',
+        title: 'Keep Inspection',
+        status: 'open',
+        items: [],
+        source: 'upload',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      TEST_DB_PATH,
+    );
+    saveInspectionRecord(
+      {
+        id: 'insp-delete',
+        projectId: p2.id,
+        number: 'CK-002',
+        title: 'Delete Inspection',
+        status: 'open',
+        items: [],
+        source: 'upload',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      TEST_DB_PATH,
+    );
+
+    deleteProject(p2.id, TEST_DB_PATH);
+    expect(getInspectionsForProject('1025', TEST_DB_PATH)).toHaveLength(1);
+    expect(getInspectionsForProject(p2.id, TEST_DB_PATH)).toHaveLength(0);
+  });
 });

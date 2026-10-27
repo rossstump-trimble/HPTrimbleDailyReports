@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { CalendarCheck, CalendarOff, CalendarX, Trash2 } from "lucide-react";
+import React, { useMemo, useState, useEffect } from "react";
+import { CalendarCheck, CalendarOff, CalendarX, ChevronLeft, ChevronRight, Search, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DailyDetailModal, BowlingCellDetail } from "./DailyDetailModal";
 import { Button } from "@/components/ui/button";
@@ -261,6 +261,8 @@ function ScheduleOverrideModal({
   );
 }
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
 export function BowlingTable({
   rows,
   daysInMonth,
@@ -275,7 +277,32 @@ export function BowlingTable({
   const [overrideCell, setOverrideCell] = useState<BowlingCellWithReport | null>(null);
   const [overrideModalOpen, setOverrideModalOpen] = useState(false);
 
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.tradePartner.name.toLowerCase().includes(q) ||
+        (r.tradePartner.category || "").toLowerCase().includes(q),
+    );
+  }, [rows, query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, safePage, pageSize]);
 
   const handleCellClick = (cell: BowlingCellWithReport, tradeCategory?: string) => {
     setSelectedCell({
@@ -289,7 +316,6 @@ export function BowlingTable({
     cell: BowlingCellWithReport,
     e: React.MouseEvent
   ) => {
-    // Quick Shift-click shortcut to immediately toggle between offsite and onsite
     if (e.shiftKey && projectId) {
       const nextStatus = cell.status === "missing" ? "offsite" : "onsite";
       try {
@@ -315,6 +341,43 @@ export function BowlingTable({
 
   return (
     <>
+      {rows.length > 10 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="relative w-64">
+            <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter trade partners…"
+              className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              Showing{" "}
+              {filteredRows.length === 0
+                ? 0
+                : (safePage - 1) * pageSize + 1}
+              –{Math.min(safePage * pageSize, filteredRows.length)} of {filteredRows.length}
+            </span>
+            <select
+              aria-label="Rows per page"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value) || 25)}
+              className="h-7 rounded border border-input bg-background px-1.5 text-xs text-foreground"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       <div className="relative w-full overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
         <table
           className="border-collapse w-full text-xs"
@@ -349,17 +412,19 @@ export function BowlingTable({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {paginatedRows.length === 0 ? (
               <tr>
                 <td
                   colSpan={daysInMonth + 2}
                   className="px-6 py-12 text-center text-sm text-muted-foreground"
                 >
-                  No trade partner companies in this bowling sheet yet. Click &quot;Manage Companies&quot; above to load from ProjectSight or add trade partners.
+                  {query
+                    ? "No trade partners match your search filter."
+                    : "No trade partner companies in this bowling sheet yet. Click \"Manage Companies\" above to load from ProjectSight or add trade partners."}
                 </td>
               </tr>
             ) : (
-              rows.map((row, rowIdx) => (
+              paginatedRows.map((row, rowIdx) => (
               <tr
                 key={row.tradePartner.id}
                 className={cn(
@@ -422,11 +487,11 @@ export function BowlingTable({
                       />
                     ) : cell.status === "missing" ? (
                       <MissingCell
-                        onClick={(e: any) => handleUnsubmittedCellClick(cell, e)}
+                        onClick={(e: React.MouseEvent) => handleUnsubmittedCellClick(cell, e)}
                       />
                     ) : (
                       <NaCell
-                        onClick={(e: any) => handleUnsubmittedCellClick(cell, e)}
+                        onClick={(e: React.MouseEvent) => handleUnsubmittedCellClick(cell, e)}
                       />
                     )}
                   </td>
@@ -451,6 +516,40 @@ export function BowlingTable({
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
+          <span>
+            Page <strong className="text-foreground">{safePage}</strong> of{" "}
+            <strong className="text-foreground">{totalPages}</strong> ({filteredRows.length} trade partners)
+          </span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-7 px-2 text-xs gap-1"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="h-7 px-2 text-xs gap-1"
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Legend & Instructions */}
       <div className="flex flex-wrap items-center justify-between gap-3 mt-2.5 text-xs text-muted-foreground">
