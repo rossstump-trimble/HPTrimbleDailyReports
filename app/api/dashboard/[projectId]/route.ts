@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { currentYearMonth, getDashboardPayload, type SourceDailyReport } from "@/lib/dashboard/enrich";
 import { listDailyReports } from "@/lib/projectsight/client";
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from "@/lib/projectsight/destination";
-import { SESSION_COOKIE } from "@/lib/local-session";
+import { AUTH_COOKIE, SESSION_COOKIE } from "@/lib/local-session";
 import { getValidTidAccessToken, tidAccessTokenFromCookie } from "@/lib/projectsight/session-token";
 import { getProjectById, getStore } from "@/lib/store";
 
@@ -26,8 +26,9 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
 
     const project = getProjectById(projectId);
     const jar = cookies();
-    const tokenRes = await getValidTidAccessToken(jar.get(SESSION_COOKIE)?.value);
-    const token = tokenRes.token || tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
+    const rawCookie = jar.get(SESSION_COOKIE)?.value || jar.get(AUTH_COOKIE)?.value;
+    const tokenRes = await getValidTidAccessToken(rawCookie);
+    const token = tokenRes.token || tidAccessTokenFromCookie(rawCookie);
     const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
     const psPortfolioId = project?.psPortfolioId || dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
     const psProjectId = project?.psProjectId || dest.projectId || DEFAULT_DESTINATION.projectId;

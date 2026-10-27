@@ -42,8 +42,6 @@ function getSigningSecret(): string {
     return secret.trim();
   }
   if (process.env.NODE_ENV === "production") {
-    // In production, if SESSION_SECRET and TID_CLIENT_SECRET are both unset,
-    // use a per-process ephemeral key so nothing can be forged from static source code.
     return FALLBACK_PROCESS_SECRET;
   }
   return "dev-only-local-session-secret-do-not-use-in-prod";
@@ -225,6 +223,16 @@ export function signSessionPayload(session: SessionData): SessionData {
   return normalized;
 }
 
+/**
+ * Compact signed session payload without bulky OAuth tokens (~250 bytes),
+ * guaranteed to fit well under the 4096-byte browser cookie limit.
+ */
+export function compactSignedSession(session: SessionData): SessionData {
+  const signed = session.sig ? session : signSessionPayload(session);
+  const { access_token: _a, refresh_token: _r, ...compact } = signed;
+  return compact;
+}
+
 export function isAllowedLoginEmail(
   email: string | undefined | null,
   customDomains?: string[],
@@ -302,7 +310,7 @@ export function applyLocalAuthCookies(response: NextResponse): NextResponse {
   };
 
   const payload = localSessionPayload();
-  response.cookies.set(AUTH_COOKIE, payload.sig || "1", httpOnly);
+  response.cookies.set(AUTH_COOKIE, JSON.stringify(compactSignedSession(payload)), httpOnly);
   response.cookies.set(SESSION_COOKIE, JSON.stringify(payload), httpOnly);
   response.cookies.set(USER_COOKIE, JSON.stringify(LOCAL_USER), {
     ...httpOnly,
@@ -352,8 +360,14 @@ export function hasLocalOrTidSession(request: {
   cookies: { get: (name: string) => { value: string } | undefined; has: (name: string) => boolean };
 }): boolean {
   const rawSession = request.cookies.get(SESSION_COOKIE)?.value;
-  const verified = parseVerifiedSession(rawSession);
-  return verified !== null;
+  if (parseVerifiedSession(rawSession) !== null) {
+    return true;
+  }
+  const rawCompact = request.cookies.get(AUTH_COOKIE)?.value;
+  if (parseVerifiedSession(rawCompact) !== null) {
+    return true;
+  }
+  return false;
 }
 
 export function safeRedirectPath(from: string | null | undefined, fallback = "/"): string {
@@ -362,7 +376,6 @@ export function safeRedirectPath(from: string | null | undefined, fallback = "/"
   if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.startsWith("/\\")) {
     return fallback;
   }
-  // Reject control characters (tabs, newlines, CR) or backslashes that WHATWG URL strips
   if (/[\x00-\x1f\x7f\\]/.test(trimmed)) {
     return fallback;
   }

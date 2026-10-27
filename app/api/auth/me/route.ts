@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalAuthRequest } from "@/lib/auth-mode";
 import {
+  AUTH_COOKIE,
   LOCAL_USER,
   SESSION_COOKIE,
+  compactSignedSession,
   isAllowedLoginEmail,
   isAdminEmail,
   parseVerifiedSession,
@@ -16,7 +18,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   if (isLocalAuthRequest(request)) {
-    const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
+    const sessionCookie =
+      request.cookies.get(SESSION_COOKIE)?.value ||
+      request.cookies.get(AUTH_COOKIE)?.value;
     if (sessionCookie) {
       try {
         const session = JSON.parse(sessionCookie);
@@ -44,12 +48,17 @@ export async function GET(request: NextRequest) {
   }
 
   const accessControl = getAccessControl();
-  const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = parseVerifiedSession(sessionCookie, {
+  const policy = {
     allowedDomains: accessControl.allowedDomains,
     allowedEmails: accessControl.allowedEmails,
-  });
-  if (!session || !sessionCookie) {
+  };
+  const rawSessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
+  const rawAuthCookie = request.cookies.get(AUTH_COOKIE)?.value;
+  const session =
+    parseVerifiedSession(rawSessionCookie, policy) ||
+    parseVerifiedSession(rawAuthCookie, policy);
+
+  if (!session) {
     return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
   }
 
@@ -66,12 +75,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
     }
 
-    const { token, refreshedSession } = await getValidTidAccessToken(sessionCookie);
-    const authenticated = Boolean(token) || (isPasskeySession && accessControl.allowPasskeyLogin);
-    if (!authenticated) {
-      return NextResponse.json({ authenticated: false, user: null }, { status: 401 });
-    }
-
+    const { refreshedSession } = await getValidTidAccessToken(rawSessionCookie || rawAuthCookie);
     const userIsAdmin = isAdminEmail(session.email, accessControl.adminEmails);
 
     const response = NextResponse.json({
@@ -92,7 +96,19 @@ export async function GET(request: NextRequest) {
         isAdmin: userIsAdmin,
         allowed: true,
       });
-      response.cookies.set(SESSION_COOKIE, JSON.stringify(signed), {
+      const compact = compactSignedSession(signed);
+      const fullStr = JSON.stringify(signed);
+      const cookieVal =
+        encodeURIComponent(fullStr).length <= 3400 ? fullStr : JSON.stringify(compact);
+
+      response.cookies.set(SESSION_COOKIE, cookieVal, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+      response.cookies.set(AUTH_COOKIE, JSON.stringify(compact), {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",

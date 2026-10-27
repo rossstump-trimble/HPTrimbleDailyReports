@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { logAuthEvent, requestAuthSnapshot } from "@/lib/auth-debug";
 import { publicAppUrl, tidOAuthRedirectUri } from "@/lib/public-origin";
-import { decodeJWT, exchangeCodeForTokens } from "@/lib/tid-auth";
+import { decodeJWT, exchangeCodeForTokens, getTIDConfig } from "@/lib/tid-auth";
 import { getAccessControl } from "@/lib/store";
+import { saveServerSideTidTokens } from "@/lib/projectsight/session-token";
 import {
   AUTH_COOKIE,
   SESSION_COOKIE,
   USER_COOKIE,
+  compactSignedSession,
   isAllowedLoginEmail,
   isAdminEmail,
   safeRedirectPath,
@@ -30,6 +32,44 @@ function failToLogin(
     ...extra,
   });
   return NextResponse.redirect(loginUrl);
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const val of values) {
+    if (typeof val === "string" && val.trim()) {
+      return val.trim();
+    }
+  }
+  return "";
+}
+
+async function fetchUserInfoEmail(accessToken: string): Promise<{
+  email?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  sub?: string;
+}> {
+  try {
+    const config = getTIDConfig();
+    const res = await fetch(`${config.issuer}/oauth/userinfo`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return {};
+    const data = (await res.json()) as Record<string, unknown>;
+    return {
+      email: firstNonEmptyString(data.email, data.preferred_username, data.upn),
+      name: firstNonEmptyString(data.name),
+      given_name: firstNonEmptyString(data.given_name),
+      family_name: firstNonEmptyString(data.family_name),
+      sub: firstNonEmptyString(data.sub),
+    };
+  } catch {
+    return {};
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -87,21 +127,44 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code, parsedPkce.verifier, redirectUri);
     const idPayload = tokens.id_token ? decodeJWT(tokens.id_token) : null;
     const accessPayload = tokens.access_token ? decodeJWT(tokens.access_token) : null;
-    const payload = idPayload || accessPayload || {};
 
-    const sub = (payload.sub as string) || "";
-    const email = (
-      (payload.email as string) ||
-      (payload.preferred_username as string) ||
-      (payload.upn as string) ||
-      ""
-    )
-      .trim()
-      .toLowerCase();
-    const givenName = (payload.given_name as string) || "";
-    const familyName = (payload.family_name as string) || "";
+    let sub = firstNonEmptyString(idPayload?.sub, accessPayload?.sub);
+    let email = firstNonEmptyString(
+      idPayload?.email,
+      accessPayload?.email,
+      idPayload?.preferred_username,
+      accessPayload?.preferred_username,
+      idPayload?.upn,
+      accessPayload?.upn,
+      idPayload?.unique_name,
+      accessPayload?.unique_name,
+    ).toLowerCase();
+    let givenName = firstNonEmptyString(
+      idPayload?.given_name,
+      accessPayload?.given_name,
+      idPayload?.first_name,
+      accessPayload?.first_name,
+    );
+    let familyName = firstNonEmptyString(
+      idPayload?.family_name,
+      accessPayload?.family_name,
+      idPayload?.last_name,
+      accessPayload?.last_name,
+    );
+    let rawName = firstNonEmptyString(idPayload?.name, accessPayload?.name);
+
+    // If email was not embedded in id_token or access_token, query /oauth/userinfo
+    if (!email && tokens.access_token) {
+      const userInfo = await fetchUserInfoEmail(tokens.access_token);
+      if (userInfo.email) email = userInfo.email.toLowerCase();
+      if (!sub && userInfo.sub) sub = userInfo.sub;
+      if (!givenName && userInfo.given_name) givenName = userInfo.given_name;
+      if (!familyName && userInfo.family_name) familyName = userInfo.family_name;
+      if (!rawName && userInfo.name) rawName = userInfo.name;
+    }
+
     const name =
-      (payload.name as string) ||
+      rawName ||
       (givenName ? `${givenName} ${familyName}`.trim() : email ? email.split("@")[0] : "");
 
     const accessControl = getAccessControl();
@@ -115,8 +178,18 @@ export async function GET(request: NextRequest) {
     }
 
     const userIsAdmin = isAdminEmail(email, accessControl.adminEmails);
+    const expiresAt = Date.now() + (tokens.expires_in || 3600) * 1000;
 
-    const sessionData = signSessionPayload({
+    // Persist full OAuth tokens server-side so browser cookies stay well under the 4KB limit
+    saveServerSideTidTokens({
+      sub,
+      email,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || undefined,
+      expires_at: expiresAt,
+    });
+
+    const fullSessionData = signSessionPayload({
       sub,
       email,
       name,
@@ -124,9 +197,18 @@ export async function GET(request: NextRequest) {
       family_name: familyName,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token || undefined,
-      expires_at: Date.now() + (tokens.expires_in || 3600) * 1000,
+      expires_at: expiresAt,
       isAdmin: userIsAdmin,
+      allowed: true,
     });
+
+    const compactSession = compactSignedSession(fullSessionData);
+    const fullSerialized = JSON.stringify(fullSessionData);
+    // Browsers silently drop cookies > 4096 bytes after URL-encoding
+    const sessionCookieValue =
+      encodeURIComponent(fullSerialized).length <= 3400
+        ? fullSerialized
+        : JSON.stringify(compactSession);
 
     const target = safeRedirectPath(parsedPkce.from, "/");
     const location = publicAppUrl(request, target);
@@ -143,7 +225,7 @@ export async function GET(request: NextRequest) {
 
     const maxAge = 60 * 60 * 24 * 7; // 7 days
 
-    response.cookies.set(SESSION_COOKIE, JSON.stringify(sessionData), {
+    response.cookies.set(SESSION_COOKIE, sessionCookieValue, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -151,7 +233,7 @@ export async function GET(request: NextRequest) {
       maxAge,
     });
 
-    response.cookies.set(AUTH_COOKIE, sessionData.sig || "1", {
+    response.cookies.set(AUTH_COOKIE, JSON.stringify(compactSession), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

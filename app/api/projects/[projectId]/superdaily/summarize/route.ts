@@ -4,7 +4,7 @@ import { synthesizeSuperdaily } from '@/lib/superdaily';
 import { fetchWeatherForDate } from '@/lib/weather-service';
 import { cookies } from 'next/headers';
 import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
-import { SESSION_COOKIE } from '@/lib/local-session';
+import { AUTH_COOKIE, SESSION_COOKIE } from '@/lib/local-session';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { listDailyReports, listProjectLocations } from '@/lib/projectsight/client';
 import type { DailyReport } from '@/types/hpproto';
@@ -61,8 +61,9 @@ export async function POST(req: Request, { params }: { params: { projectId: stri
     // Attempt live ProjectSight lookup if authenticated
     try {
       const jar = cookies();
-      const tokenRes = await getValidTidAccessToken(jar.get(SESSION_COOKIE)?.value);
-      const token = tokenRes.token || tidAccessTokenFromCookie(jar.get(SESSION_COOKIE)?.value);
+      const rawCookie = jar.get(SESSION_COOKIE)?.value || jar.get(AUTH_COOKIE)?.value;
+      const tokenRes = await getValidTidAccessToken(rawCookie);
+      const token = tokenRes.token || tidAccessTokenFromCookie(rawCookie);
       const dest = destinationFromCookieWithFallback(jar.get(DESTINATION_COOKIE)?.value);
       const psPortfolioId = project.psPortfolioId || dest.portfolioId || DEFAULT_DESTINATION.portfolioId;
       const psProjectId = project.psProjectId || dest.projectId || DEFAULT_DESTINATION.projectId;

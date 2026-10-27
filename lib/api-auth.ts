@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { isLocalAuthRequest } from "@/lib/auth-mode";
 import {
+  AUTH_COOKIE,
   LOCAL_USER,
   SESSION_COOKIE,
   isAdminEmail,
@@ -37,12 +38,17 @@ export function getRequestAuthContext(req: Request): AuthenticatedContext {
 
   try {
     const accessControl = getAccessControl();
-    const jar = cookies();
-    const rawCookie = jar.get(SESSION_COOKIE)?.value;
-    const session = parseVerifiedSession(rawCookie, {
+    const policy = {
       allowedDomains: accessControl.allowedDomains,
       allowedEmails: accessControl.allowedEmails,
-    });
+    };
+    const jar = cookies();
+    const rawSession = jar.get(SESSION_COOKIE)?.value;
+    const rawAuth = jar.get(AUTH_COOKIE)?.value;
+    const session =
+      parseVerifiedSession(rawSession, policy) ||
+      parseVerifiedSession(rawAuth, policy);
+
     if (!session) {
       return { authenticated: false, isAdmin: false, email: "", name: "", session: null };
     }

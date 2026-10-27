@@ -10,7 +10,7 @@ import { readUpload } from '@/lib/upload-store';
 import { sendFog617ToProjectSight } from '@/lib/projectsight/send-daily';
 import { captureFromDailyReport } from '@/lib/projectsight/send-intake-daily';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
-import { SESSION_COOKIE, parseVerifiedSession, signSessionPayload } from '@/lib/local-session';
+import { AUTH_COOKIE, SESSION_COOKIE, compactSignedSession, parseVerifiedSession, signSessionPayload } from '@/lib/local-session';
 import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
 
 export const dynamic = 'force-dynamic';
@@ -44,7 +44,7 @@ export async function POST(
     }
 
     const jar = cookies();
-    const sessionCookie = jar.get(SESSION_COOKIE)?.value;
+    const sessionCookie = jar.get(SESSION_COOKIE)?.value || jar.get(AUTH_COOKIE)?.value;
     const session = parseVerifiedSession(sessionCookie);
     const approverEmail = session?.email || body.approverEmail || 'Superintendent';
 

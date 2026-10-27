@@ -14,7 +14,7 @@ import { backupIngestedDaily, type IngestedFileAttachment } from '@/lib/ingest-b
 import type { CrewEntry, DailyReport, TierSubcontractor } from '@/types/hpproto';
 import { slugTradePartnerId } from '@/lib/trade-partner';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
-import { SESSION_COOKIE } from '@/lib/local-session';
+import { AUTH_COOKIE, SESSION_COOKIE } from '@/lib/local-session';
 import { getRequestAuthContext } from '@/lib/api-auth';
 import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import { sendFog617ToProjectSight } from '@/lib/projectsight/send-daily';
@@ -223,7 +223,7 @@ export async function POST(req: Request) {
     let sessionCookie: string | undefined;
     try {
       const jar = cookies();
-      sessionCookie = jar.get(SESSION_COOKIE)?.value;
+      sessionCookie = jar.get(SESSION_COOKIE)?.value || jar.get(AUTH_COOKIE)?.value;
     } catch {
       // ignore outside request context
     }

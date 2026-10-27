@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalAuthRequest } from "@/lib/auth-mode";
-import { SESSION_COOKIE, isAdminEmail, parseVerifiedSession } from "@/lib/local-session";
+import { AUTH_COOKIE, SESSION_COOKIE, isAdminEmail, parseVerifiedSession } from "@/lib/local-session";
 import {
   getAccessControl,
   updateAccessControl,
@@ -18,11 +18,15 @@ function checkAdmin(request: NextRequest): { allowed: boolean; email?: string } 
     return { allowed: true, email: "local@trimble.com" };
   }
   const accessControl = getAccessControl();
-  const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = parseVerifiedSession(sessionCookie, {
+  const policy = {
     allowedDomains: accessControl.allowedDomains,
     allowedEmails: accessControl.allowedEmails,
-  });
+  };
+  const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
+  const authCookie = request.cookies.get(AUTH_COOKIE)?.value;
+  const session =
+    parseVerifiedSession(sessionCookie, policy) ||
+    parseVerifiedSession(authCookie, policy);
   if (!session) {
     return { allowed: false };
   }

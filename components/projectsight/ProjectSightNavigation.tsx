@@ -38,10 +38,23 @@ export default function ProjectSightNavigation({
 
   const [lastProjectId, setLastProjectIdState] = useState<string | null>(null);
   const [defaultProjectId, setDefaultProjectIdState] = useState<string | null>(null);
+  const [isAdminUser, setIsAdminUser] = useState<boolean>(true);
 
   useEffect(() => {
     setLastProjectIdState(getLastSelectedProjectId());
     setDefaultProjectIdState(getDefaultProjectId());
+
+    try {
+      const match = document.cookie.match(/(?:^|; )ps_user=([^;]*)/);
+      if (match) {
+        const parsed = JSON.parse(decodeURIComponent(match[1])) as { isAdmin?: boolean };
+        if (typeof parsed?.isAdmin === "boolean") {
+          setIsAdminUser(parsed.isAdmin);
+        }
+      }
+    } catch {
+      // ignore cookie parse error
+    }
 
     const handleSync = () => {
       setLastProjectIdState(getLastSelectedProjectId());
@@ -70,7 +83,9 @@ export default function ProjectSightNavigation({
     fallback: "1025",
   });
 
-  const menuItems = getSortedNavigationData(activeProjectId);
+  const menuItems = getSortedNavigationData(activeProjectId).filter(
+    (item) => item.id !== "admin" || isAdminUser,
+  );
 
   const renderMenuItem = (item: MenuItem) => {
     const isActive = isItemActive(pathname, item);
