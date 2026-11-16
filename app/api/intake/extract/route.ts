@@ -6,6 +6,7 @@ import {
 } from '@/lib/extract-daily';
 import { saveStagingUpload } from '@/lib/upload-store';
 import { errorMessage, previewText, voiceLog } from '@/lib/voice-log';
+import { getProjectById } from '@/lib/store';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
 
     const transcriptField = String(formData.get('transcript') || '').trim().slice(0, MAX_TRANSCRIPT_CHARS);
     const companyHint = String(formData.get('company') || '').trim().slice(0, 200);
+    const projectIdRaw = String(formData.get('projectId') || '').trim();
+    const projectKeywords = projectIdRaw ? (getProjectById(projectIdRaw)?.keywords || []) : [];
 
     // Deduplicate in case the client submitted both
     const files = Array.from(new Set(rawFiles));
@@ -75,7 +78,7 @@ export async function POST(req: Request) {
       fileNames: inputFiles.map((f) => f.filename),
     });
 
-    const extracted = await extractDailyFromMultipleFiles(inputFiles);
+    const extracted = await extractDailyFromMultipleFiles(inputFiles, projectKeywords);
     if (companyHint && !extracted.tradePartnerName) {
       extracted.tradePartnerName = companyHint;
     }

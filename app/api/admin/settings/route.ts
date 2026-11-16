@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
         trackedCompaniesCount: (p.tradePartners || []).length,
         totalCompaniesCount: (p.availableCompanies || []).length,
         workingDays: p.workingDays || [1, 2, 3, 4, 5],
+        keywords: p.keywords || ["colo", "MPOE", "AHU", "VAV", "switchgear", "PDU", "generator", "chiller", "conduit", "feeder"],
       })),
     },
   });

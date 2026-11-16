@@ -30,6 +30,7 @@ interface VoiceInterviewProps {
   onComplete: (draft: ExtractedDaily) => void;
   onCancel: () => void;
   audience?: "trade" | "hp";
+  projectId?: string;
 }
 
 interface TurnResponse {
@@ -62,6 +63,7 @@ export default function VoiceInterview({
   onComplete,
   onCancel,
   audience = "trade",
+  projectId,
 }: VoiceInterviewProps) {
   const opening = openingQuestion(mode, audience);
   const [draft, setDraft] = useState<ExtractedDaily>(seedDraft);
@@ -142,6 +144,7 @@ export default function VoiceInterview({
         const body = new FormData();
         body.append("mode", mode);
         body.append("audience", audience);
+        if (projectId) body.append("projectId", projectId);
         body.append("skip", skip ? "true" : "false");
         body.append("advance", stay ? "false" : "true");
         body.append("draft", JSON.stringify(draft));

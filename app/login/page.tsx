@@ -109,7 +109,7 @@ function LoginForm() {
         />
 
         <div className="text-center">
-          <h1 className="text-lg font-semibold text-gray-900">HP Daily Reporting</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Hensel Phelps Daily Reporting</h1>
           <p className="text-xs text-gray-500 mt-1">
             Sign in with Trimble Identity (@henselphelps.com or @trimble.com)
           </p>

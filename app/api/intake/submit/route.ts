@@ -299,7 +299,7 @@ export async function POST(req: Request) {
       tradePartnerName: tradePartnerName || 'Trade Partner',
       date,
       submittedAt: existingReport?.submittedAt || new Date().toISOString(),
-      submittedBy: sanitizeText(body.submittedBy, 120) || (isHp ? 'HP Staff' : 'Field Intake'),
+      submittedBy: sanitizeText(body.submittedBy, 120) || (isHp ? 'Hensel Phelps Staff' : 'Field Intake'),
       locationDescription: sanitizeText(body.locationDescription, 4000),
       workerCount: sanitizedWorkerCount,
       totalHours: sanitizedTotalHours,
@@ -433,7 +433,7 @@ export async function POST(req: Request) {
       projectSightDailyId: psDailyId,
       attached: psAttached,
       message: isHp
-        ? (psDailyId ? `HP daily approved and synced to ProjectSight #${psDailyId}.` : 'HP daily approved.')
+        ? (psDailyId ? `Hensel Phelps daily approved and synced to ProjectSight #${psDailyId}.` : 'Hensel Phelps daily approved.')
         : 'Daily report received and queued for review.',
     });
   } catch (err) {

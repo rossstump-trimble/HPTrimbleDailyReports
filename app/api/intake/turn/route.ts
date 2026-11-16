@@ -10,6 +10,7 @@ import {
 import type { ExtractedDaily } from '@/lib/extract-response';
 import { transcribeAudioFromBuffer } from '@/lib/transcribe-audio';
 import { errorMessage, newVoiceRequestId, previewText, voiceLog } from '@/lib/voice-log';
+import { getProjectById } from '@/lib/store';
 
 export const runtime = 'nodejs';
 
@@ -55,6 +56,8 @@ export async function POST(req: Request) {
     const typedTranscript = typeof typedRaw === 'string' ? typedRaw.trim() : '';
     const advance = formData.get('advance') !== 'false';
     const audience = formData.get('audience') === 'hp' ? ('hp' as const) : ('trade' as const);
+    const projectIdRaw = String(formData.get('projectId') || '').trim();
+    const projectKeywords = projectIdRaw ? (getProjectById(projectIdRaw)?.keywords || []) : [];
     const file = formData.get('file');
     const hadFile = file instanceof File;
     voiceLog('turn-route', 'info', 'turn request', {
@@ -80,7 +83,7 @@ export async function POST(req: Request) {
         );
       }
       const buffer = Buffer.from(await file.arrayBuffer());
-      transcript = await transcribeAudioFromBuffer(buffer, file.type, file.name, requestId);
+      transcript = await transcribeAudioFromBuffer(buffer, file.type, file.name, requestId, projectKeywords);
       if (!transcript) {
         voiceLog('turn-route', 'error', 'transcription empty', {
           requestId,

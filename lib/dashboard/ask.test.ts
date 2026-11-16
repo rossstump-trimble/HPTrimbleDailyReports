@@ -19,8 +19,8 @@ describe("answerDashboardQuestion", () => {
   });
 
   it("separates HP backlog from trade misses", () => {
-    const result = answerDashboardQuestion("Which reports are waiting on HP to log?", data);
-    expect(result.answer).toMatch(/HP logging backlog|received/i);
+    const result = answerDashboardQuestion("Which reports are waiting on Hensel Phelps to log?", data);
+    expect(result.answer).toMatch(/logging backlog|received/i);
   });
 
   it("surfaces top missing days", () => {

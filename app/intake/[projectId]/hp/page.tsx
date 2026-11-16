@@ -52,7 +52,7 @@ function emptyHpForm(employeeName = "", employeeRole = ""): DailyFormData {
   return {
     tradePartnerId: "hensel-phelps",
     tradePartnerName: "Hensel Phelps",
-    submittedBy: submitter || "HP Field Staff",
+    submittedBy: submitter || "Hensel Phelps Field Staff",
     date: todayISO(),
     locationDescription: "",
     workerCount: 0,
@@ -105,7 +105,7 @@ function ExtractionWarningBanner({ source }: { source: "file" | "voice" | null }
     <div className="rounded-2xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-3">
       <AlertTriangle size={16} className="text-amber-600 flex-none mt-0.5" />
       <div>
-        <p className="font-semibold">Review your HP daily report</p>
+        <p className="font-semibold">Review your Hensel Phelps daily report</p>
         <p className="mt-0.5">{msg}</p>
       </div>
     </div>
@@ -148,9 +148,9 @@ function SuccessCard({
             Auto-Approved
           </Badge>
         </div>
-        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">HP Staff Daily Log Synced</h2>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Hensel Phelps Staff Daily Log Synced</h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 max-w-md">
-          {submitter ? `Report from ${submitter}` : "Your HP employee daily log"} {date ? `for ${date}` : ""} has been saved and dispatched directly to ProjectSight. No approval required.
+          {submitter ? `Report from ${submitter}` : "Your Hensel Phelps staff daily log"} {date ? `for ${date}` : ""} has been saved and dispatched directly to ProjectSight. No approval required.
         </p>
       </div>
 
@@ -162,7 +162,7 @@ function SuccessCard({
           style={{ backgroundColor: "#0063a3" }}
         >
           <Plus size={16} />
-          Submit Another HP Report
+          Submit Another Hensel Phelps Report
         </button>
 
         {tidReady && (
@@ -247,7 +247,7 @@ export default function HpIntakePage() {
     const submitter = [employeeName.trim(), employeeRole.trim()].filter(Boolean).join(" - ");
     setFormData((prev) => ({
       ...prev,
-      submittedBy: submitter || "HP Field Staff",
+      submittedBy: submitter || "Hensel Phelps Field Staff",
       tradePartnerId: "hensel-phelps",
       tradePartnerName: "Hensel Phelps",
       isHpEmployee: true,
@@ -278,6 +278,7 @@ export default function HpIntakePage() {
         }
         body.append("file", files[0]);
         body.append("company", "Hensel Phelps");
+        if (projectId) body.append("projectId", projectId);
 
         const res = await fetch("/api/intake/extract", {
           method: "POST",
@@ -355,6 +356,7 @@ export default function HpIntakePage() {
           body.append("transcript", transcriptText);
         }
         body.append("company", "Hensel Phelps");
+        if (projectId) body.append("projectId", projectId);
 
         const res = await fetch("/api/intake/extract", {
           method: "POST",
@@ -406,7 +408,7 @@ export default function HpIntakePage() {
           ...formData,
           tradePartnerId: "hensel-phelps",
           tradePartnerName: "Hensel Phelps",
-          submittedBy: submitter || formData.submittedBy || "HP Field Staff",
+          submittedBy: submitter || formData.submittedBy || "Hensel Phelps Field Staff",
           isHpEmployee: true,
           workerCount: 0,
           totalHours: 0,
@@ -455,14 +457,14 @@ export default function HpIntakePage() {
       {/* Header bar */}
       <header className="w-full bg-[#0063a3] text-white px-4 py-3.5 shadow-md flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center font-black text-sm tracking-wider border border-white/20">
-            HP
+          <div className="px-2 h-9 rounded-xl bg-white/15 flex items-center justify-center font-bold text-xs tracking-wider border border-white/20 whitespace-nowrap">
+            HENSEL PHELPS
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-bold leading-tight">Hensel Phelps Staff Daily Log</h1>
               <Badge className="bg-amber-400 text-slate-950 hover:bg-amber-400 text-[10px] font-bold px-1.5 py-0 border-0">
-                HP STAFF
+                HENSEL PHELPS STAFF
               </Badge>
             </div>
             <p className="text-xs text-blue-100/90 leading-tight">
@@ -491,7 +493,7 @@ export default function HpIntakePage() {
               <div className="flex items-center gap-2">
                 <UserCheck className="h-4 w-4 text-[#0063a3] dark:text-blue-400" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-[#0063a3] dark:text-blue-400">
-                  HP Staff Submitter Details
+                  Hensel Phelps Staff Submitter Details
                 </h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -621,7 +623,7 @@ export default function HpIntakePage() {
                         Quick Guided Q&A (3 Short Questions)
                       </h2>
                       <Badge variant="outline" className="text-[11px] font-bold text-[#0063a3] border-blue-300">
-                        HP Staff Mode
+                        Hensel Phelps Staff Mode
                       </Badge>
                     </div>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -716,7 +718,7 @@ export default function HpIntakePage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Badge className="bg-[#0063a3] text-white text-xs">
-                HP Staff Guided Q&A
+                Hensel Phelps Staff Guided Q&A
               </Badge>
               <button
                 type="button"
@@ -729,6 +731,7 @@ export default function HpIntakePage() {
             <VoiceInterview
               mode={interviewMode}
               audience="hp"
+              projectId={projectId}
               seedDraft={formData}
               onComplete={handleInterviewComplete}
               onCancel={() => setInterviewMode(null)}

@@ -17,7 +17,7 @@ const STARTERS = [
   "Who didn't turn in a daily today?",
   "Is Berg Electric on site today?",
   "When did CB Floors last check in?",
-  "Which reports are waiting on HP to log?",
+  "Which reports are waiting on Hensel Phelps to log?",
   "Which days this month had the most missing reports?",
 ];
 
@@ -46,7 +46,7 @@ export function AskAgent({
     {
       id: "hello",
       role: "agent",
-      text: "Ask about today's missing dailies, whether a trade is on site, last check-in, or HP logging backlog.",
+      text: "Ask about today's missing dailies, whether a trade is on site, last check-in, or Hensel Phelps logging backlog.",
       followUps: STARTERS.slice(0, 3),
     },
   ]);

@@ -380,7 +380,7 @@ export function DashboardShell() {
             ) : null}
             {data.kpis.hpBacklogToday > 0 ? (
               <span className="rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 px-2.5 py-1">
-                {data.kpis.hpBacklogToday} received — HP has not logged
+                {data.kpis.hpBacklogToday} received — Hensel Phelps has not logged
               </span>
             ) : null}
           </div>

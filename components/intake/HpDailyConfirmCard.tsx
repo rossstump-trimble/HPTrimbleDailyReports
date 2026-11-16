@@ -153,7 +153,7 @@ export default function HpDailyConfirmCard({
         />
       </div>
 
-      {/* Card 2: Trade Favors & Accommodations (HP Specific) */}
+      {/* Card 2: Trade Favors & Accommodations (Hensel Phelps Specific) */}
       <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
@@ -161,7 +161,7 @@ export default function HpDailyConfirmCard({
             <h3 className="text-sm font-bold">Trades &amp; Favors Done for Partners</h3>
           </div>
           <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">
-            HP Special
+            Hensel Phelps Special
           </Badge>
         </div>
         <p className="text-xs text-amber-900/80 dark:text-amber-300/80">

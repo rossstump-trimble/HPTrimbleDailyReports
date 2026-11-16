@@ -314,11 +314,11 @@ export default function ProjectsPage() {
                       <QrCodeView url={intakeUrl} size={105} showUrl={true} showActions={true} />
                     </div>
 
-                    {/* 2. HP Employee QR */}
+                    {/* 2. Hensel Phelps Employee QR */}
                     <div className="bg-blue-50/50 dark:bg-blue-950/20 p-3 rounded-2xl border border-blue-200/80 dark:border-blue-900/60 flex flex-col items-center">
                       <div className="flex items-center justify-between w-full mb-2 px-0.5">
                         <Badge className="bg-[#0063a3] text-white hover:bg-[#0063a3] text-[10px] font-bold uppercase tracking-wider">
-                          HP Staff Only
+                          Hensel Phelps Staff Only
                         </Badge>
                         <button
                           onClick={() => window.open(hpIntakeUrl, "_blank")}

@@ -428,7 +428,7 @@ export default function ReviewQueuePage() {
                             By: <strong className="text-foreground">{report.submittedBy || "Field Foreman"}</strong>
                             {report.isHpEmployee && (
                               <Badge className="bg-[#0063a3] text-white hover:bg-[#0063a3] text-[10px] py-0 h-4 font-bold">
-                                HP Staff
+                                Hensel Phelps Staff
                               </Badge>
                             )}
                             {isVerified ? (

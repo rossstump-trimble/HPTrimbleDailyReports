@@ -63,6 +63,7 @@ export interface Project {
   psProjectId?: string;
   lat?: number;
   lon?: number;
+  keywords?: string[];
 }
 
 export interface CrewEntry {

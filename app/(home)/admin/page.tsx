@@ -35,6 +35,7 @@ interface AdminProjectSummary {
   trackedCompaniesCount: number;
   totalCompaniesCount: number;
   workingDays?: number[];
+  keywords?: string[];
 }
 
 const ALL_DAYS = [
@@ -71,6 +72,8 @@ export default function AdminControlsPage() {
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [projectWorkingDays, setProjectWorkingDays] = useState<Record<string, number[]>>({});
+  const [projectKeywords, setProjectKeywords] = useState<Record<string, string[]>>({});
+  const [newKeywordInputs, setNewKeywordInputs] = useState<Record<string, string>>({});
 
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
@@ -82,11 +85,14 @@ export default function AdminControlsPage() {
       }
       setData(json);
       if (Array.isArray(json.summary?.projects)) {
-        const mapping: Record<string, number[]> = {};
+        const workingMap: Record<string, number[]> = {};
+        const keywordMap: Record<string, string[]> = {};
         for (const p of json.summary.projects as AdminProjectSummary[]) {
-          mapping[p.id] = p.workingDays || [1, 2, 3, 4, 5];
+          workingMap[p.id] = p.workingDays || [1, 2, 3, 4, 5];
+          keywordMap[p.id] = p.keywords || ["colo", "MPOE", "AHU", "VAV", "switchgear", "PDU"];
         }
-        setProjectWorkingDays(mapping);
+        setProjectWorkingDays(workingMap);
+        setProjectKeywords(keywordMap);
       }
     } catch (err) {
       setFeedback({
@@ -145,6 +151,50 @@ export default function AdminControlsPage() {
       setFeedback({
         type: "error",
         text: err instanceof Error ? err.message : "Failed to update project working days.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddKeyword = (projectId: string) => {
+    const raw = (newKeywordInputs[projectId] || "").trim();
+    if (!raw) return;
+    const current = projectKeywords[projectId] || [];
+    const tokens = raw.split(",").map((t) => t.trim()).filter(Boolean);
+    const updated = Array.from(new Set([...current, ...tokens]));
+    setProjectKeywords((prev) => ({ ...prev, [projectId]: updated }));
+    setNewKeywordInputs((prev) => ({ ...prev, [projectId]: "" }));
+  };
+
+  const handleRemoveKeyword = (projectId: string, kw: string) => {
+    const current = projectKeywords[projectId] || [];
+    setProjectKeywords((prev) => ({ ...prev, [projectId]: current.filter((k) => k !== kw) }));
+  };
+
+  const handleSaveKeywords = async (projectId: string, projectName: string) => {
+    const keywords = projectKeywords[projectId] || [];
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/keywords`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keywords }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        throw new Error(json.error || "Failed to update keywords");
+      }
+      setFeedback({
+        type: "success",
+        text: `Updated keyword library for "${projectName}" (${keywords.length} terms).`,
+      });
+      await fetchAdminData();
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to update project keywords.",
       });
     } finally {
       setSaving(false);
@@ -659,6 +709,101 @@ export default function AdminControlsPage() {
                         >
                           <Save className="h-3.5 w-3.5" />
                           Save Schedule
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Project Terminology & Speech Keyword Library */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Globe className="h-4 w-4 text-[#0063a3]" />
+                Project Terminology &amp; Speech-to-Text Keyword Library
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Configure specialized industry nomenclature, room designations, and trade acronyms (e.g. &quot;colo&quot; for colocation, MPOE, AHU, switchgear) to prevent speech-to-text confusion and automatic transcription rework.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+                {data.summary.projects.map((proj) => {
+                  const currentKws = projectKeywords[proj.id] || proj.keywords || ["colo", "MPOE", "AHU", "VAV", "switchgear", "PDU"];
+                  const savedKws = proj.keywords || ["colo", "MPOE", "AHU", "VAV", "switchgear", "PDU"];
+                  const isModified =
+                    currentKws.length !== savedKws.length ||
+                    !currentKws.every((k) => savedKws.includes(k));
+
+                  return (
+                    <div
+                      key={proj.id}
+                      className="p-4 flex flex-col gap-3 bg-card hover:bg-muted/10 transition-colors"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {proj.code}
+                          </Badge>
+                          <span className="font-semibold text-sm text-foreground">{proj.name}</span>
+                          <span className="text-xs text-muted-foreground">({currentKws.length} active keywords)</span>
+                        </div>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={saving || !isModified}
+                          onClick={() => void handleSaveKeywords(proj.id, proj.name)}
+                          className="h-8 text-xs gap-1.5 self-start sm:self-auto"
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Keyword Library
+                        </Button>
+                      </div>
+
+                      {/* Keyword tags */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {currentKws.map((kw) => (
+                          <Badge key={kw} variant="secondary" className="text-xs font-mono gap-1 py-1 bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                            <span>{kw}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveKeyword(proj.id, kw)}
+                              className="text-slate-400 hover:text-red-600"
+                              title={`Remove ${kw}`}
+                            >
+                              ×
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+
+                      {/* Add keyword input */}
+                      <div className="flex gap-2 max-w-md">
+                        <Input
+                          value={newKeywordInputs[proj.id] || ""}
+                          onChange={(e) => setNewKeywordInputs((prev) => ({ ...prev, [proj.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddKeyword(proj.id);
+                            }
+                          }}
+                          placeholder="Add keyword or comma-separated terms (e.g. colo, MPOE, PDU)"
+                          className="h-8 text-xs"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={saving || !(newKeywordInputs[proj.id] || "").trim()}
+                          onClick={() => handleAddKeyword(proj.id)}
+                          className="h-8 text-xs shrink-0"
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Add
                         </Button>
                       </div>
                     </div>

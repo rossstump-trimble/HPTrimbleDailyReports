@@ -45,7 +45,7 @@ function cellTooltip(cell: DashboardCell, trade: DashboardTradePartner): {
       };
     case "received":
       return {
-        title: "Received — HP has not logged",
+        title: "Received — Hensel Phelps has not logged",
         message: `${trade.name} turned in a daily for ${date}. Hensel Phelps still needs to enter it in Project Sight.`,
         stats,
       };
@@ -305,7 +305,7 @@ export function MonthlyGrid({
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        Hover a cell for status and manpower / hours. Grey is not on site or still ahead of {data.asOfDate}. Amber means the trade turned it in — HP has not logged it in Project Sight.
+        Hover a cell for status and manpower / hours. Grey is not on site or still ahead of {data.asOfDate}. Amber means the trade turned it in — Hensel Phelps has not logged it in ProjectSight.
       </p>
     </div>
   );

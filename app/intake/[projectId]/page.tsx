@@ -365,6 +365,9 @@ export default function IntakePage() {
         if (formData.tradePartnerName) {
           body.append("company", formData.tradePartnerName);
         }
+        if (projectId) {
+          body.append("projectId", projectId);
+        }
 
         const res = await fetch("/api/intake/extract", {
           method: "POST",
@@ -450,6 +453,9 @@ export default function IntakePage() {
         }
         if (formData.tradePartnerName) {
           body.append("company", formData.tradePartnerName);
+        }
+        if (projectId) {
+          body.append("projectId", projectId);
         }
 
         const res = await fetch("/api/intake/extract", {
@@ -725,6 +731,7 @@ export default function IntakePage() {
             ) : interviewMode ? (
               <VoiceInterview
                 mode={interviewMode}
+                projectId={projectId}
                 seedDraft={{
                   tradePartnerName: formData.tradePartnerName || undefined,
                 }}

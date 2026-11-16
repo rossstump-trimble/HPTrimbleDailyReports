@@ -318,6 +318,26 @@ export function updateProjectWorkingDays(
   return proj;
 }
 
+export function updateProjectKeywords(
+  projectId: string,
+  keywords: string[],
+  filePath: string = getDefaultDbPath(),
+): Project | undefined {
+  const store = getStore(filePath);
+  const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return undefined;
+  const unique = Array.from(
+    new Set(
+      keywords
+        .map(k => k.trim())
+        .filter(Boolean),
+    ),
+  );
+  proj.keywords = unique;
+  saveStore(store, filePath);
+  return proj;
+}
+
 export function updateProjectTradePartners(
   projectId: string,
   tradePartners: TradePartner[],

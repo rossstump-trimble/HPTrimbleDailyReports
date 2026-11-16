@@ -31,7 +31,7 @@ function tradeStatusLine(row: DashboardRow, asOfDate: string): string {
     return `${row.trade.name} was on site ${formatDate(asOfDate)} but has not turned in a daily report.`;
   }
   if (today.status === "received") {
-    return `${row.trade.name} turned in a daily for ${formatDate(asOfDate)} (${today.manpower} / ${today.hours}h) — HP has not logged it in Project Sight yet.`;
+    return `${row.trade.name} turned in a daily for ${formatDate(asOfDate)} (${today.manpower} / ${today.hours}h) — Hensel Phelps has not logged it in ProjectSight yet.`;
   }
   return `${row.trade.name} is logged in Project Sight for ${formatDate(asOfDate)}: ${today.manpower} people / ${today.hours}h.`;
 }
@@ -44,12 +44,12 @@ function helpResult(): AskResult {
       "Who didn't turn in a daily today?",
       "Is Berg Electric on site today?",
       "When did CB Floors last check in?",
-      "Which reports are waiting on HP to log?",
+      "Which reports are waiting on Hensel Phelps to log?",
       "Which days this month had the most missing reports?",
     ],
     suggestedFollowUps: [
       "Who is missing a daily today?",
-      "Show HP logging backlog",
+      "Show Hensel Phelps logging backlog",
       "Worst compliance this month",
     ],
   };
@@ -106,7 +106,7 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
       return {
         answer: `No trade partners are missing a daily for ${formatDate(data.asOfDate)}. Everyone on site has turned one in.`,
         bullets: [],
-        suggestedFollowUps: ["Which reports are waiting on HP to log?", "Month compliance"],
+        suggestedFollowUps: ["Which reports are waiting on Hensel Phelps to log?", "Month compliance"],
       };
     }
     return {
@@ -114,12 +114,12 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
       bullets: items.map((i) => `${i.tradeName} (${i.category})`),
       suggestedFollowUps: [
         `Is ${items[0].tradeName} on site today?`,
-        "Which reports are waiting on HP to log?",
+        "Which reports are waiting on Hensel Phelps to log?",
       ],
     };
   }
 
-  if (/\b(hp|hensel|not logged|waiting to log|backlog|received but)\b/.test(lower) && named.length === 0) {
+  if (/\b(hp|hensel|hensel phelps|not logged|waiting to log|backlog|received but)\b/.test(lower) && named.length === 0) {
     const todayBacklog = data.delinquency.hpBacklog.filter((i) => i.date === data.asOfDate);
     const monthBacklog = data.delinquency.hpBacklog;
     const bullets = [
@@ -130,7 +130,7 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
         .map((i) => `${formatDate(i.date)} — ${i.tradeName}: ${i.manpower ?? "—"} / ${i.hours ?? "—"}h`),
     ];
     return {
-      answer: `HP logging backlog: ${todayBacklog.length} received today and not logged, ${monthBacklog.length} across ${monthTitle(data.month)}. This is an HP delay, not a trade-partner miss.`,
+      answer: `Hensel Phelps logging backlog: ${todayBacklog.length} received today and not logged, ${monthBacklog.length} across ${monthTitle(data.month)}. This is a Hensel Phelps delay, not a trade-partner miss.`,
       bullets: bullets.slice(0, 8),
       suggestedFollowUps: ["Who is missing a daily today?", "Month compliance"],
     };
@@ -154,7 +154,7 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
       answer: `Lowest logged-in-Project-Sight rates for ${monthTitle(data.month)}:`,
       bullets: worst.map(
         (t) =>
-          `${t.tradeName}: ${t.compliancePct}% logged · ${t.missingDays} missing · ${t.receivedUnloggedDays} waiting on HP`,
+          `${t.tradeName}: ${t.compliancePct}% logged · ${t.missingDays} missing · ${t.receivedUnloggedDays} waiting on Hensel Phelps`,
       ),
       suggestedFollowUps: worst[0] ? [`When did ${worst[0].tradeName} last check in?`] : [],
     };
@@ -202,7 +202,7 @@ export function answerDashboardQuestion(question: string, data: DashboardPayload
           ? `${row.trade.name} last turned in a daily on ${formatDate(last)}.`
           : `${row.trade.name} has no received or logged daily so far this month.`,
         bullets: [
-          `${row.missingDays} missing · ${row.receivedUnloggedDays} waiting on HP · ${row.loggedDays} logged`,
+          `${row.missingDays} missing · ${row.receivedUnloggedDays} waiting on Hensel Phelps · ${row.loggedDays} logged`,
           `Month totals: ${row.monthTotalManpower} people · ${row.monthTotalHours}h`,
         ],
         suggestedFollowUps: [`Is ${row.trade.name} on site today?`],

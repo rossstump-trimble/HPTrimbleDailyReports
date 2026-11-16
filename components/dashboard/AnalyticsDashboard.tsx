@@ -99,7 +99,7 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
           tone="rose"
         />
         <Kpi
-          label="HP backlog today"
+          label="Hensel Phelps backlog today"
           value={kpis.hpBacklogToday}
           hint={`${data.delinquency.hpBacklog.length} received, not logged this month`}
           icon={Clock3}
@@ -118,7 +118,7 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Needs attention today</CardTitle>
-            <CardDescription>Trade miss vs HP logging delay — {data.asOfDate}</CardDescription>
+            <CardDescription>Trade miss vs Hensel Phelps logging delay — {data.asOfDate}</CardDescription>
           </CardHeader>
           <CardContent className="grid sm:grid-cols-2 gap-4">
             <div>
@@ -139,7 +139,7 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-amber-600 mb-2">Received, not logged</div>
               {data.delinquency.hpBacklog.filter((i) => i.date === data.asOfDate).length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing sitting with HP today.</p>
+                <p className="text-sm text-muted-foreground">Nothing sitting with Hensel Phelps today.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {data.delinquency.hpBacklog
@@ -265,7 +265,7 @@ export function AnalyticsDashboard({ data }: { data: DashboardPayload }) {
                 <div className="flex items-center justify-between text-sm mb-1">
                   <span className="font-medium truncate pr-2">{t.tradeName}</span>
                   <span className="text-xs tabular-nums text-muted-foreground">
-                    {t.compliancePct}% · {t.missingDays} miss · {t.receivedUnloggedDays} HP
+                    {t.compliancePct}% · {t.missingDays} miss · {t.receivedUnloggedDays} unlogged
                   </span>
                 </div>
                 <div className="h-1.5 rounded-full bg-muted overflow-hidden">

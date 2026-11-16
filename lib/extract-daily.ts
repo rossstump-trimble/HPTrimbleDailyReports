@@ -345,10 +345,11 @@ export interface ExtractInputFile {
 
 export async function extractDailyFromMultipleFiles(
   files: ExtractInputFile[],
+  projectKeywords: string[] = [],
 ): Promise<ExtractedDaily> {
   if (!files || files.length === 0) return {};
   if (files.length === 1) {
-    return extractDailyFromBuffer(files[0].buffer, files[0].mimeType, files[0].filename);
+    return extractDailyFromBuffer(files[0].buffer, files[0].mimeType, files[0].filename, projectKeywords);
   }
 
   const audioFiles = files.filter((f) => isAudioMedia(f.mimeType, f.filename));
@@ -371,6 +372,7 @@ export async function extractDailyFromMultipleFiles(
         imageDocFiles[0].buffer,
         imageDocFiles[0].mimeType,
         imageDocFiles[0].filename,
+        projectKeywords,
       );
     } else if (imageDocFiles.length > 1) {
       combined = await extractWithGeminiMultiple(imageDocFiles);
@@ -386,7 +388,7 @@ export async function extractDailyFromMultipleFiles(
 
   for (const af of audioFiles) {
     try {
-      const tr = await transcribeAudioFromBuffer(af.buffer, af.mimeType, af.filename);
+      const tr = await transcribeAudioFromBuffer(af.buffer, af.mimeType, af.filename, undefined, projectKeywords);
       if (tr) {
         const aExtracted = await extractDailyFromTranscript(tr);
         combined = {
@@ -405,9 +407,10 @@ export async function extractDailyFromBuffer(
   buffer: Buffer,
   mimeType: string,
   filename: string,
+  projectKeywords: string[] = [],
 ): Promise<ExtractedDaily> {
   if (isAudioMedia(mimeType, filename)) {
-    const transcript = await transcribeAudioFromBuffer(buffer, mimeType, filename);
+    const transcript = await transcribeAudioFromBuffer(buffer, mimeType, filename, undefined, projectKeywords);
     return extractDailyFromTranscript(transcript);
   }
 

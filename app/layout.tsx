@@ -15,7 +15,7 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "HP Daily Reporting",
+  title: "Hensel Phelps Daily Reporting",
   description: "Hensel Phelps Daily Reporting & Compliance",
   icons: {
     icon: "/images/favicon.ico",
