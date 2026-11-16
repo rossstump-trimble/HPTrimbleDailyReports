@@ -172,27 +172,58 @@ export async function listProjectLocations(
   portfolioId: string,
   projectId: string,
 ): Promise<ProjectSightRef[]> {
-  try {
-    const safePort = safePsPathSegment(portfolioId);
-    const safeProj = safePsPathSegment(projectId);
-    const payload = await psFetch(
-      `${projectSightBaseUrl()}/${safePort}/${safeProj}/locations`,
-      {
-        method: 'GET',
-        headers: projectSightHeaders(accessToken),
-      },
-    );
-    return items(payload)
-      .map((item) => ({
-        id: String(caseGet(item, ['LocationID', 'LocationId', 'Id', 'id']) || ''),
-        name: String(
-          caseGet(item, ['Name', 'Description', 'Path', 'Title', 'Location']) || '',
-        ).trim(),
-      }))
-      .filter((row) => row.name);
-  } catch {
-    return [];
+  const safePort = safePsPathSegment(portfolioId);
+  const safeProj = safePsPathSegment(projectId);
+
+  // 1. Try dedicated ProjectSight location endpoints
+  for (const subpath of ['locations', 'Locations', 'lookups/locations']) {
+    try {
+      const payload = await psFetch(
+        `${projectSightBaseUrl()}/${safePort}/${safeProj}/${subpath}`,
+        {
+          method: 'GET',
+          headers: projectSightHeaders(accessToken),
+        },
+      );
+      const rows = items(payload)
+        .map((item) => ({
+          id: String(caseGet(item, ['LocationID', 'LocationId', 'Id', 'id']) || ''),
+          name: String(
+            caseGet(item, ['Name', 'Description', 'Path', 'Title', 'Location']) || '',
+          ).trim(),
+        }))
+        .filter((row) => row.name && row.id);
+      if (rows.length > 0) return rows;
+    } catch {
+      // Try next
+    }
   }
+
+  // 2. Discover known LocationID and Location names directly from existing ProjectSight daily reports
+  try {
+    const rawReports = await listDailyReports(accessToken, portfolioId, projectId);
+    const locationMap = new Map<string, ProjectSightRef>();
+    for (const r of rawReports) {
+      const works = Array.isArray(r.DailyWorks) ? (r.DailyWorks as Record<string, unknown>[]) : [];
+      for (const w of works) {
+        const lid = caseGet(w, ['LocationID', 'LocationId']);
+        const lName = String(caseGet(w, ['Location', 'LocationDescription']) || '').trim();
+        if (lid != null && lName) {
+          const numId = String(lid);
+          if (!locationMap.has(lName.toLowerCase())) {
+            locationMap.set(lName.toLowerCase(), { id: numId, name: lName });
+          }
+        }
+      }
+    }
+    if (locationMap.size > 0) {
+      return Array.from(locationMap.values());
+    }
+  } catch {
+    // Ignore fallback failure
+  }
+
+  return [];
 }
 
 export async function listDailyReports(

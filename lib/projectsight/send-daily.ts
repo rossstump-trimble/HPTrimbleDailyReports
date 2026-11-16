@@ -61,9 +61,16 @@ export async function sendFog617ToProjectSight(
     try {
       const locations = await listProjectLocations(args.token, args.portfolioId, args.projectId);
       const text = args.capture.locationDescription.toLowerCase();
-      // Match longest location name first
+      // Match longest location name first (or tokens separated by '>')
       const sorted = [...locations].sort((a, b) => b.name.length - a.name.length);
-      const match = sorted.find((loc) => loc.name && text.includes(loc.name.toLowerCase()));
+      const match = sorted.find((loc) => {
+        if (!loc.name) return false;
+        const fullLower = loc.name.toLowerCase();
+        if (text.includes(fullLower)) return true;
+        // Check hierarchy segments, e.g. "Building A Interior > Level 1" -> check "Level 1"
+        const segments = fullLower.split('>').map((s) => s.trim()).filter((s) => s.length >= 3);
+        return segments.some((seg) => text.includes(seg));
+      });
       if (match?.id) {
         const numId = Number(match.id);
         if (Number.isFinite(numId)) {
