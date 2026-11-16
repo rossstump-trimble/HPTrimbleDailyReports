@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
         psProjectId: p.psProjectId,
         trackedCompaniesCount: (p.tradePartners || []).length,
         totalCompaniesCount: (p.availableCompanies || []).length,
+        workingDays: p.workingDays || [1, 2, 3, 4, 5],
       })),
     },
   });

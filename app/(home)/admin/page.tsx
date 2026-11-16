@@ -15,6 +15,8 @@ import {
   Globe,
   Database,
   ArrowLeft,
+  Calendar,
+  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +34,18 @@ interface AdminProjectSummary {
   psProjectId?: string;
   trackedCompaniesCount: number;
   totalCompaniesCount: number;
+  workingDays?: number[];
 }
+
+const ALL_DAYS = [
+  { label: "Sun", value: 0 },
+  { label: "Mon", value: 1 },
+  { label: "Tue", value: 2 },
+  { label: "Wed", value: 3 },
+  { label: "Thu", value: 4 },
+  { label: "Fri", value: 5 },
+  { label: "Sat", value: 6 },
+];
 
 interface AdminDashboardResponse {
   success: boolean;
@@ -57,6 +70,7 @@ export default function AdminControlsPage() {
   const [newDomain, setNewDomain] = useState("");
   const [newAllowedEmail, setNewAllowedEmail] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [projectWorkingDays, setProjectWorkingDays] = useState<Record<string, number[]>>({});
 
   const fetchAdminData = useCallback(async () => {
     setLoading(true);
@@ -67,6 +81,13 @@ export default function AdminControlsPage() {
         throw new Error(json.error || "Failed to load admin settings");
       }
       setData(json);
+      if (Array.isArray(json.summary?.projects)) {
+        const mapping: Record<string, number[]> = {};
+        for (const p of json.summary.projects as AdminProjectSummary[]) {
+          mapping[p.id] = p.workingDays || [1, 2, 3, 4, 5];
+        }
+        setProjectWorkingDays(mapping);
+      }
     } catch (err) {
       setFeedback({
         type: "error",
@@ -76,6 +97,59 @@ export default function AdminControlsPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleToggleDay = (projectId: string, dayValue: number) => {
+    setProjectWorkingDays((prev) => {
+      const current = prev[projectId] || [1, 2, 3, 4, 5];
+      const next = current.includes(dayValue)
+        ? current.filter((d) => d !== dayValue)
+        : [...current, dayValue].sort((a, b) => a - b);
+      return { ...prev, [projectId]: next };
+    });
+  };
+
+  const handleApplyPreset = (projectId: string, preset: "mon-fri" | "mon-sat" | "all") => {
+    const days =
+      preset === "mon-fri"
+        ? [1, 2, 3, 4, 5]
+        : preset === "mon-sat"
+          ? [1, 2, 3, 4, 5, 6]
+          : [0, 1, 2, 3, 4, 5, 6];
+    setProjectWorkingDays((prev) => ({ ...prev, [projectId]: days }));
+  };
+
+  const handleSaveWorkingDays = async (projectId: string, projectName: string) => {
+    const days = projectWorkingDays[projectId] || [1, 2, 3, 4, 5];
+    if (days.length === 0) {
+      setFeedback({ type: "error", text: "At least one working day must be selected." });
+      return;
+    }
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/working-days`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workingDays: days }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        throw new Error(json.error || "Failed to update working days");
+      }
+      setFeedback({
+        type: "success",
+        text: `Updated required working days for "${projectName}" (${days.length} days/week).`,
+      });
+      await fetchAdminData();
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to update project working days.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     void fetchAdminData();
@@ -473,6 +547,126 @@ export default function AdminControlsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Project Working Days & Schedule Configuration */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-[#0063a3]" />
+                Project Working Days &amp; Schedule Configuration
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Configure required working days per project. Trade partners are evaluated for missing daily reports on these days across the Bowling Sheet and dashboards.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+                {data.summary.projects.map((proj) => {
+                  const currentDays = projectWorkingDays[proj.id] ?? proj.workingDays ?? [1, 2, 3, 4, 5];
+                  const savedDays = proj.workingDays ?? [1, 2, 3, 4, 5];
+                  const isModified =
+                    currentDays.length !== savedDays.length ||
+                    !currentDays.every((d) => savedDays.includes(d));
+
+                  return (
+                    <div
+                      key={proj.id}
+                      className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card hover:bg-muted/10 transition-colors"
+                    >
+                      <div className="space-y-1 min-w-[220px]">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {proj.code}
+                          </Badge>
+                          <span className="font-semibold text-sm text-foreground">{proj.name}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Active Schedule:{" "}
+                          <strong className="text-foreground">
+                            {currentDays.length === 7
+                              ? "7 Days / Week"
+                              : currentDays.length === 5 && !currentDays.includes(0) && !currentDays.includes(6)
+                              ? "5 Days / Week (Mon–Fri)"
+                              : currentDays.length === 6 && !currentDays.includes(0)
+                              ? "6 Days / Week (Mon–Sat)"
+                              : `${currentDays.length} Days / Week`}
+                          </strong>
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* Quick Presets */}
+                        <div className="flex items-center gap-1 border-r border-border pr-3">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleApplyPreset(proj.id, "mon-fri")}
+                            className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            Mon–Fri
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleApplyPreset(proj.id, "mon-sat")}
+                            className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            Mon–Sat
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleApplyPreset(proj.id, "all")}
+                            className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            7 Days
+                          </Button>
+                        </div>
+
+                        {/* Individual Day Toggle Buttons */}
+                        <div className="flex items-center gap-1">
+                          {ALL_DAYS.map((day) => {
+                            const active = currentDays.includes(day.value);
+                            return (
+                              <button
+                                key={day.value}
+                                type="button"
+                                onClick={() => handleToggleDay(proj.id, day.value)}
+                                disabled={saving}
+                                title={day.label}
+                                className={`w-8 h-8 text-xs font-semibold rounded-md border transition-colors ${
+                                  active
+                                    ? "bg-[#0063a3] text-white border-[#0063a3] shadow-sm"
+                                    : "bg-muted/30 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                                }`}
+                              >
+                                {day.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Save Button */}
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={saving || !isModified}
+                          onClick={() => void handleSaveWorkingDays(proj.id, proj.name)}
+                          className="h-8 text-xs gap-1.5 ml-2"
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Schedule
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Project Company Directory Hygiene */}
           <Card>

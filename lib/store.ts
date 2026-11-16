@@ -1060,78 +1060,64 @@ export function getBowlingMatrix(
       continue;
     }
 
-    // Group reports by submitter (person)
-    const submitterGroups = new Map<string, { key: string; displayName: string; reports: DailyReport[] }>();
-    for (const r of tradeReports) {
-      const sub = getReportSubmitterKey(r);
-      const existing = submitterGroups.get(sub.key);
-      if (existing) {
-        existing.reports.push(r);
-      } else {
-        submitterGroups.set(sub.key, { key: sub.key, displayName: sub.displayName, reports: [r] });
-      }
-    }
+    // Consolidate reports by company: each company/trade partner gets a single row
+    let monthTotalWorkers = 0;
+    let monthTotalHours = 0;
+    let submittedDaysCount = 0;
 
-    const linesToBuild: {
-      rowTrade: TradePartner;
-      reports: DailyReport[];
-    }[] = [];
+    const rowTrade = trade;
+    const reports = tradeReports;
 
-    if (submitterGroups.size <= 1) {
-      const reports = submitterGroups.size === 1 ? Array.from(submitterGroups.values())[0].reports : [];
-      linesToBuild.push({ rowTrade: trade, reports });
-    } else {
-      // Multiple submitters from the same company -> each gets a separate line!
-      for (const group of Array.from(submitterGroups.values())) {
-        const hasNamedSubmitter = group.displayName && group.key !== '__default';
-        const label = hasNamedSubmitter ? group.displayName : 'Field Foreman';
-        linesToBuild.push({
-          rowTrade: {
-            ...trade,
-            id: `${trade.id}--${slugTradePartnerId(label)}`,
-            name: `${trade.name} (${label})`,
-            companyName: trade.name,
-            submitterName: label,
-          },
-          reports: group.reports,
+    const cells: BowlingCell[] = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = day < 10 ? `0${day}` : `${day}`;
+      const dateStr = `${yearMonth}-${dayStr}`;
+      const dateObj = new Date(year, month - 1, day);
+      const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+      const isWorkDay = activeWorkingDays.includes(dayOfWeek);
+      const overrideKey = `${trade.id}:${dateStr}`;
+      const dayOverride = project.tradeDayOverrides?.[overrideKey];
+
+      const dayReports = reports.filter((r) => r.date === dateStr);
+
+      if (dayReports.length > 0) {
+        submittedDaysCount++;
+        const dayWorkers = dayReports.reduce((sum, r) => sum + (r.workerCount ?? 0), 0);
+        const dayHours = dayReports.reduce((sum, r) => sum + (r.totalHours ?? 0), 0);
+        monthTotalWorkers += dayWorkers;
+        monthTotalHours += dayHours;
+
+        const primaryReport = dayReports[0];
+        const allApproved = dayReports.every((r) => r.approvalStatus === 'approved');
+        const anySta = dayReports.some((r) => r.staCompleted || Boolean(r.staFiles && r.staFiles.length > 0));
+
+        cells.push({
+          date: dateStr,
+          dayNumber: day,
+          tradePartnerId: rowTrade.id,
+          tradePartnerName: rowTrade.name,
+          status: 'submitted',
+          dailyReportId: primaryReport.id,
+          workerCount: dayWorkers,
+          totalHours: dayHours,
+          staCompleted: anySta,
+          fullReport:
+            dayReports.length === 1
+              ? primaryReport
+              : {
+                  ...primaryReport,
+                  workerCount: dayWorkers,
+                  totalHours: dayHours,
+                  submittedBy: dayReports.map((r) => r.submittedBy).filter(Boolean).join(', '),
+                  locationDescription: Array.from(
+                    new Set(dayReports.map((r) => r.locationDescription).filter(Boolean)),
+                  ).join('; '),
+                  notes: Array.from(new Set(dayReports.map((r) => r.notes).filter(Boolean))).join('; '),
+                  crewBreakdown: dayReports.flatMap((r) => r.crewBreakdown || []),
+                  approvalStatus: allApproved ? 'approved' : primaryReport.approvalStatus,
+                },
         });
-      }
-    }
-
-    for (const { rowTrade, reports } of linesToBuild) {
-      let monthTotalWorkers = 0;
-      let monthTotalHours = 0;
-      let submittedDaysCount = 0;
-
-      const cells: BowlingCell[] = [];
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dayStr = day < 10 ? `0${day}` : `${day}`;
-        const dateStr = `${yearMonth}-${dayStr}`;
-        const dateObj = new Date(year, month - 1, day);
-        const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-        const isWorkDay = activeWorkingDays.includes(dayOfWeek);
-        const overrideKey = `${trade.id}:${dateStr}`;
-        const dayOverride = project.tradeDayOverrides?.[overrideKey];
-
-        const daily = reports.find((r) => r.date === dateStr);
-
-        if (daily) {
-          submittedDaysCount++;
-          monthTotalWorkers += daily.workerCount ?? 0;
-          monthTotalHours += daily.totalHours ?? 0;
-          cells.push({
-            date: dateStr,
-            dayNumber: day,
-            tradePartnerId: rowTrade.id,
-            tradePartnerName: rowTrade.name,
-            status: 'submitted',
-            dailyReportId: daily.id,
-            workerCount: daily.workerCount,
-            totalHours: daily.totalHours,
-            staCompleted: daily.staCompleted,
-            fullReport: daily,
-          });
-        } else if (dayOverride === 'offsite') {
+      } else if (dayOverride === 'offsite') {
           cells.push({
             date: dateStr,
             dayNumber: day,
@@ -1173,7 +1159,6 @@ export function getBowlingMatrix(
         monthTotalHours,
         submittedDaysCount,
       });
-    }
   }
 
   return {

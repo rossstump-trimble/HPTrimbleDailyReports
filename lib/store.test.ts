@@ -123,7 +123,7 @@ describe('HPproto Local Store', () => {
     expect(updatedCell?.totalHours).toBe(64);
   });
 
-  it('preserves separate lines for multiple people from the same company without overwriting', () => {
+  it('consolidates reports from multiple people into a single company row on the bowling matrix', () => {
     updateProjectTradePartners('1025', [{ id: 'titan-electric', name: 'Titan Electric' }], TEST_DB_PATH);
 
     // Submitter 1: Carlos Mendoza
@@ -172,17 +172,18 @@ describe('HPproto Local Store', () => {
     const titanReports = store.dailyReports.filter(r => r.tradePartnerId === 'titan-electric' && r.date === '2026-08-20');
     expect(titanReports).toHaveLength(2);
 
-    // Verify Bowling Matrix generates separate lines for each person
+    // Verify Bowling Matrix generates a single row for the company
     const matrix = getBowlingMatrix('1025', '2026-08', TEST_DB_PATH);
-    const titanRows = matrix.rows.filter(r => r.tradePartner.companyName === 'Titan Electric' || r.tradePartner.id.startsWith('titan-electric'));
-    expect(titanRows).toHaveLength(2);
-    expect(titanRows.some(r => r.tradePartner.name.includes('Carlos Mendoza'))).toBe(true);
-    expect(titanRows.some(r => r.tradePartner.name.includes('Dave Miller'))).toBe(true);
+    const titanRows = matrix.rows.filter(r => r.tradePartner.companyName === 'Titan Electric' || r.tradePartner.id === 'titan-electric');
+    expect(titanRows).toHaveLength(1);
+    expect(titanRows[0].tradePartner.name).toBe('Titan Electric');
 
-    const carlosRow = titanRows.find(r => r.tradePartner.name.includes('Carlos Mendoza'));
-    const daveRow = titanRows.find(r => r.tradePartner.name.includes('Dave Miller'));
-    expect(carlosRow?.cells.find(c => c.date === '2026-08-20')?.workerCount).toBe(4);
-    expect(daveRow?.cells.find(c => c.date === '2026-08-20')?.workerCount).toBe(6);
+    const cell = titanRows[0].cells.find(c => c.date === '2026-08-20');
+    expect(cell?.status).toBe('submitted');
+    expect(cell?.workerCount).toBe(10);
+    expect(cell?.totalHours).toBe(80);
+    expect(cell?.fullReport?.submittedBy).toContain('Carlos Mendoza');
+    expect(cell?.fullReport?.submittedBy).toContain('Dave Miller');
   });
 
   it('approves a daily report, records approver metadata, and auto-adds company to trade partners', () => {
