@@ -29,6 +29,12 @@ export interface CompanyContact {
   phone?: string;
 }
 
+export interface CompanyCrew {
+  id: string;
+  name: string;
+  psCrewId?: number;
+}
+
 export interface ProjectCompany {
   id: string;
   psCompanyId?: number;
@@ -36,6 +42,9 @@ export interface ProjectCompany {
   trade?: string;
   isTracked: boolean;
   contacts: CompanyContact[];
+  crews?: CompanyCrew[];
+  defaultCrewName?: string;
+  defaultCrewId?: number;
 }
 
 export interface Project {
@@ -90,6 +99,10 @@ export interface DailyReport {
   notes: string;
   tradesAndFavors?: string;
   isHpEmployee?: boolean;
+  crewName?: string;
+  psCrewId?: number;
+  locationId?: string | number;
+  psLocationId?: number;
   staCompleted: boolean;
   emailRecipients: string[];
   rawSourceFileName?: string;

@@ -1,6 +1,7 @@
 import {
   attachDailyReportFile,
   createDailyReport,
+  listProjectLocations,
   ProjectSightHttpError,
 } from './client';
 import {
@@ -53,6 +54,25 @@ export async function sendFog617ToProjectSight(
     weather = await fetchWeatherForDate(dateStr);
   } catch (wErr) {
     console.warn('[sendFog617ToProjectSight] weather fetch fallback', wErr);
+  }
+
+  // Auto-resolve ProjectSight LocationID if not explicitly set
+  if (args.capture.psLocationId == null && args.capture.locationDescription) {
+    try {
+      const locations = await listProjectLocations(args.token, args.portfolioId, args.projectId);
+      const text = args.capture.locationDescription.toLowerCase();
+      // Match longest location name first
+      const sorted = [...locations].sort((a, b) => b.name.length - a.name.length);
+      const match = sorted.find((loc) => loc.name && text.includes(loc.name.toLowerCase()));
+      if (match?.id) {
+        const numId = Number(match.id);
+        if (Number.isFinite(numId)) {
+          args.capture.psLocationId = numId;
+        }
+      }
+    } catch {
+      // Ignore location resolution fallback error
+    }
   }
 
   const created = await deps.createDailyReport(

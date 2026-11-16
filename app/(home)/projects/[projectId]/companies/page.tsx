@@ -18,6 +18,7 @@ import {
   Phone,
   UserCheck,
   Trash2,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +85,38 @@ export default function CompaniesPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [savingContact, setSavingContact] = useState(false);
+
+  // Designated Crew state
+  const [editingCrewCompanyId, setEditingCrewCompanyId] = useState<string | null>(null);
+  const [crewInputValue, setCrewInputValue] = useState("");
+
+  const handleSaveCrew = async (companyId: string, crewName: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/companies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-crew",
+          companyId,
+          defaultCrewName: crewName.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to update designated crew");
+      }
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === companyId ? { ...c, defaultCrewName: crewName.trim() || undefined } : c)),
+      );
+      setEditingCrewCompanyId(null);
+      setFeedback({ type: "success", text: "Updated designated crew for company." });
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not update crew.",
+      });
+    }
+  };
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -577,6 +610,10 @@ export default function CompaniesPage() {
                             <span className="text-xs px-2 py-0.5 rounded bg-slate-100 font-medium text-slate-600">
                               {company.trade || "Trade Partner"}
                             </span>
+                            <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-[#0063a3] border border-blue-200/60 font-medium flex items-center gap-1">
+                              <Wrench className="w-3 h-3 text-[#0063a3]" />
+                              Crew: <strong>{company.defaultCrewName || "Main Crew"}</strong>
+                            </span>
                             <button
                               type="button"
                               onClick={() => toggleExpand(company.id)}
@@ -641,9 +678,61 @@ export default function CompaniesPage() {
                       </div>
                     </div>
 
-                    {/* Expandable Contacts section */}
+                    {/* Expandable Contacts & Crew section */}
                     {isExpanded && (
-                      <div className="bg-slate-50 border-t border-slate-100 px-12 py-3">
+                      <div className="bg-slate-50 border-t border-slate-100 px-12 py-3 space-y-3">
+                        {/* Designated Crew Bar */}
+                        <div className="bg-white p-2.5 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <Wrench className="w-4 h-4 text-[#0063a3] shrink-0" />
+                            <div>
+                              <span className="font-semibold text-slate-800">Designated ProjectSight Crew:</span>{" "}
+                              <strong className="text-[#0063a3]">{company.defaultCrewName || "Main Crew (Default)"}</strong>
+                              <p className="text-[11px] text-slate-400">
+                                Labor cards synced to ProjectSight will use this crew name instead of defaulting to the first crew on file.
+                              </p>
+                            </div>
+                          </div>
+                          {editingCrewCompanyId === company.id ? (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Input
+                                value={crewInputValue}
+                                onChange={(e) => setCrewInputValue(e.target.value)}
+                                placeholder="e.g. Framing Crew A"
+                                className="h-7 text-xs w-44"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => void handleSaveCrew(company.id, crewInputValue)}
+                                className="h-7 px-2 text-xs"
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingCrewCompanyId(null)}
+                                className="h-7 px-2 text-xs text-slate-500"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingCrewCompanyId(company.id);
+                                setCrewInputValue(company.defaultCrewName || "Main Crew");
+                              }}
+                              className="h-7 px-2.5 text-xs gap-1 shrink-0"
+                            >
+                              <Wrench className="w-3 h-3" />
+                              Configure Crew
+                            </Button>
+                          )}
+                        </div>
+
                         <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
                           <span>Associated Company Contacts ({company.contacts.length})</span>
                           <button

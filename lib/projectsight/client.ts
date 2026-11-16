@@ -238,19 +238,60 @@ export async function listCompanies(
 ): Promise<Record<string, unknown>[]> {
   const safePort = safePsPathSegment(portfolioId);
   if (projectId) {
+    const safeProj = safePsPathSegment(projectId);
+
+    // 1. Try project-level ProjectCompanies / Companies endpoints
+    for (const subpath of ['ProjectCompanies', 'Companies', 'projectcompanies']) {
+      try {
+        const payload = await psFetch(
+          `${projectSightBaseUrl()}/${safePort}/${safeProj}/${subpath}`,
+          {
+            method: 'GET',
+            headers: projectSightHeaders(accessToken),
+          },
+        );
+        const result = items(payload);
+        if (result.length > 0) return result;
+      } catch {
+        // Fallback to next candidate endpoint
+      }
+    }
+
+    // 2. Try project-level contracts to pull contracted trade partners
     try {
-      const safeProj = safePsPathSegment(projectId);
       const payload = await psFetch(
-        `${projectSightBaseUrl()}/${safePort}/${safeProj}/Companies`,
+        `${projectSightBaseUrl()}/${safePort}/${safeProj}/contracts`,
         {
           method: 'GET',
           headers: projectSightHeaders(accessToken),
         },
       );
-      const result = items(payload);
-      if (result.length > 0) return result;
+      const contractItems = items(payload);
+      if (contractItems.length > 0) {
+        const seen = new Set<string>();
+        const contractCompanies: Record<string, unknown>[] = [];
+        for (const c of contractItems) {
+          const compName = String(
+            caseGet(c, ['ToCompanyName', 'ToCompany', 'CompanyName', 'Company', 'Vendor', 'VendorCompany', 'TradePartner']) || '',
+          ).trim();
+          if (!compName) continue;
+          const key = compName.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const compId = caseGet(c, ['ToCompanyID', 'ToCompanyId', 'CompanyID', 'CompanyId', 'VendorID', 'VendorId']);
+          contractCompanies.push({
+            CompanyID: compId != null ? Number(compId) : undefined,
+            Name: compName,
+            CompanyName: compName,
+            Trade: String(caseGet(c, ['Trade', 'Category', 'ScopeOfWork']) || 'Trade Partner').trim(),
+            Contacts: [],
+          });
+        }
+        if (contractCompanies.length > 0) return contractCompanies;
+      }
     } catch {
-      // Fallback to portfolio level below
+      // Continue to portfolio fallback
     }
   }
 

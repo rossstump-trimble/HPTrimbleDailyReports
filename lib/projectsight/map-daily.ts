@@ -4,6 +4,10 @@ import type { TierSubcontractor } from '@/types/hpproto';
 export interface Fog617Capture {
   tradePartnerName?: string;
   psCompanyId?: number;
+  crewName?: string;
+  psCrewId?: number;
+  locationId?: string | number;
+  psLocationId?: number;
   submittedBy?: string;
   date?: string;
   locationDescription?: string;
@@ -128,6 +132,20 @@ export function mapFog617ToProjectSightBody(
       if (resolvedCompanyId != null) {
         item.CompanyID = resolvedCompanyId;
       }
+      if (capture.psCrewId != null) {
+        item.CrewID = capture.psCrewId;
+      }
+      if (capture.crewName) {
+        item.Crew = capture.crewName;
+        item.CrewName = capture.crewName;
+      }
+      if (capture.psLocationId != null || capture.locationId != null) {
+        const lid = capture.psLocationId ?? Number(capture.locationId);
+        if (Number.isFinite(lid)) {
+          item.LocationID = lid;
+          item.LocationId = lid;
+        }
+      }
       dailyWorksItems.push(item);
     }
   } else {
@@ -154,6 +172,20 @@ export function mapFog617ToProjectSightBody(
     if (resolvedCompanyId != null) {
       item.CompanyID = resolvedCompanyId;
     }
+    if (capture.psCrewId != null) {
+      item.CrewID = capture.psCrewId;
+    }
+    if (capture.crewName) {
+      item.Crew = capture.crewName;
+      item.CrewName = capture.crewName;
+    }
+    if (capture.psLocationId != null || capture.locationId != null) {
+      const lid = capture.psLocationId ?? Number(capture.locationId);
+      if (Number.isFinite(lid)) {
+        item.LocationID = lid;
+        item.LocationId = lid;
+      }
+    }
     dailyWorksItems.push(item);
   }
 
@@ -167,6 +199,17 @@ export function mapFog617ToProjectSightBody(
     DailyWorks: dailyWorksItems,
     Works: dailyWorksItems,
   };
+  if (capture.psLocationId != null || capture.locationId != null) {
+    const lid = capture.psLocationId ?? Number(capture.locationId);
+    if (Number.isFinite(lid)) {
+      payload.LocationID = lid;
+      payload.LocationId = lid;
+    }
+  }
+  if (effectiveLocation) {
+    payload.Location = effectiveLocation;
+    payload.LocationDescription = effectiveLocation;
+  }
   if (weather?.weatherNotes) {
     payload.WeatherNotes = weather.weatherNotes;
   } else if (weather?.summary) {

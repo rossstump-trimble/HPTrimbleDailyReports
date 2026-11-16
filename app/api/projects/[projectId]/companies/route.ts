@@ -101,7 +101,7 @@ export async function POST(
     }
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: 'sync-connected' | 'preview-sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete' | 'toggle-tracking';
+      action?: 'sync-connected' | 'preview-sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete' | 'toggle-tracking' | 'update-crew';
       sourceProjectId?: string;
       sourcePortfolioId?: string;
       name?: string;
@@ -113,9 +113,33 @@ export async function POST(
       isTracked?: boolean;
       trackImported?: boolean;
       selectedCompanyIds?: string[];
+      defaultCrewName?: string;
     };
 
     const action = body.action || 'sync-connected';
+
+    // Action: Update company crew
+    if (action === 'update-crew') {
+      const companyId = (body.companyId || body.id || '').trim();
+      const defaultCrewName = (body.defaultCrewName || '').trim();
+      if (!companyId) {
+        return NextResponse.json({ success: false, error: 'companyId is required' }, { status: 400 });
+      }
+      const current = getProjectCompanies(projectId);
+      const match = current.find(
+        (c) => c.id.toLowerCase() === companyId.toLowerCase() || c.name.toLowerCase() === companyId.toLowerCase(),
+      );
+      if (!match) {
+        return NextResponse.json({ success: false, error: 'Company not found' }, { status: 404 });
+      }
+      match.defaultCrewName = defaultCrewName || undefined;
+      setProjectCompanies(projectId, current);
+      return NextResponse.json({
+        success: true,
+        company: match,
+        message: `Updated default crew for "${match.name}".`,
+      });
+    }
 
     // Action: Toggle tracking
     if (action === 'toggle-tracking') {

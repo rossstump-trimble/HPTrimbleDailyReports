@@ -8,6 +8,11 @@ import { slugTradePartnerId } from '@/lib/trade-partner';
 
 export function captureFromDailyReport(report: DailyReport): Fog617Capture {
   let psCompanyId: number | undefined;
+  let crewName = report.crewName;
+  let psCrewId = report.psCrewId;
+  let psLocationId = report.psLocationId ?? (report.locationId ? Number(report.locationId) : undefined);
+  if (!Number.isFinite(psLocationId)) psLocationId = undefined;
+
   try {
     if (report.projectId) {
       const companies = getProjectCompanies(report.projectId);
@@ -23,6 +28,12 @@ export function captureFromDailyReport(report: DailyReport): Fog617Capture {
       if (matched?.psCompanyId != null) {
         psCompanyId = matched.psCompanyId;
       }
+      if (!crewName && matched?.defaultCrewName) {
+        crewName = matched.defaultCrewName;
+      }
+      if (psCrewId == null && matched?.defaultCrewId != null) {
+        psCrewId = matched.defaultCrewId;
+      }
     }
   } catch {
     // ignore store read issues in isolated unit tests
@@ -31,6 +42,10 @@ export function captureFromDailyReport(report: DailyReport): Fog617Capture {
   return {
     tradePartnerName: report.tradePartnerName,
     psCompanyId,
+    crewName,
+    psCrewId,
+    locationId: report.locationId,
+    psLocationId,
     submittedBy: report.submittedBy,
     date: report.date,
     locationDescription: report.locationDescription,
