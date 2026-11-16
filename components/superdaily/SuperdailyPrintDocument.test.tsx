@@ -24,6 +24,7 @@ const mockReport: SuperdailyReport = {
     humidity: 45,
     rainfall: 0,
     snowfall: 0,
+    weatherNotes: "Mild winds and clear skies.",
   },
   tradeSummaries: [
     {
@@ -49,6 +50,7 @@ const mockReport: SuperdailyReport = {
   safetyAndStas: {
     allCompleted: false,
     staNotes: "Apex completed morning STA; Tri-County pending submission.",
+    incidentsReported: 0,
   },
 };
 

@@ -239,6 +239,11 @@ modus-wc-card p {
 
 /* Add support for height transitions */
 @layer utilities {
+  @media print {
+    header, nav, aside, [role="navigation"] {
+      display: none !important;
+    }
+  }
   .transition-height {
     transition-property: height;
   }

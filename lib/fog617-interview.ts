@@ -561,9 +561,23 @@ function applyGuidedSlot(
 }
 
 export function mergeDumpDraft(base: ExtractedDaily, extracted: ExtractedDaily): ExtractedDaily {
+  // If base has no locationDescription but extracted put work into notes,
+  // or extracted has locationDescription, prioritize locationDescription
+  let locationDescription = extracted.locationDescription?.trim() || base.locationDescription?.trim();
+  let notes = extracted.notes?.trim() ? extracted.notes : base.notes;
+
+  // Safeguard: If locationDescription is empty, but notes has text that does not look like pure delays/safety,
+  // promote it to locationDescription so ProjectSight Labor Card receives work performed.
+  if (!locationDescription && notes) {
+    locationDescription = notes;
+    notes = undefined;
+  }
+
   return {
     ...base,
     ...extracted,
+    locationDescription: locationDescription || undefined,
+    notes: notes || undefined,
     crewBreakdown:
       extracted.crewBreakdown && extracted.crewBreakdown.length > 0
         ? extracted.crewBreakdown
@@ -580,7 +594,6 @@ export function mergeDumpDraft(base: ExtractedDaily, extracted: ExtractedDaily):
       extracted.emailRecipients && extracted.emailRecipients.length > 0
         ? extracted.emailRecipients
         : base.emailRecipients,
-    notes: extracted.notes?.trim() ? extracted.notes : base.notes,
     spokenTranscript: [base.spokenTranscript, extracted.spokenTranscript]
       .filter((part): part is string => Boolean(part && part.trim()))
       .join('\n'),

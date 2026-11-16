@@ -114,6 +114,14 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
               }
             } else {
               const companyName = String(raw.CompanyName || raw.Company || 'General Contractor').trim();
+              // If companyName is General Contractor (or empty) and has zero workers/hours, omit it
+              if (
+                companyName.toLowerCase() === 'general contractor' &&
+                reportWorkers === 0 &&
+                reportHours === 0
+              ) {
+                continue;
+              }
               if (excludedSet.has(companyName.toLowerCase()) || excludedSet.has(slugTradePartnerId(companyName).toLowerCase())) {
                 continue;
               }

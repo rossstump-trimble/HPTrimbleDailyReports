@@ -8,11 +8,15 @@ export type { ExtractedDaily } from '@/lib/extract-response';
 
 const EXTRACTION_PROMPT = `You are a construction daily report parser. Extract structured data from this daily report document.
 
+IMPORTANT FIELD DISTINCTIONS:
+- "locationDescription": MUST contain both the location/area worked AND the specific work performed, tasks completed, installations, or trade activities described. In ProjectSight, this maps to "Location / Work Performed" on the labor card.
+- "notes": Reserved ONLY for delays, material shortages, RFIs/discrepancies, safety observations, or general coordination items. Do NOT put regular work performed, installations, or crew activity descriptions into notes.
+
 Return a JSON object with ONLY these fields (omit fields you cannot find or are unsure about):
 {
   "tradePartnerName": "company name string",
   "date": "YYYY-MM-DD format",
-  "locationDescription": "location or area worked",
+  "locationDescription": "location/area and work performed (e.g. Sector 4 Level 2 - installed 120ft ductwork and pulled feeder wire)",
   "workerCount": number (headcount — total workers on site),
   "totalHours": number (total worker-hours for the day),
   "crewBreakdown": [{ "craft": "trade name", "count": number }],
@@ -20,7 +24,7 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
   "tierSubsSummary": "summary of tier subcontractors or 'None'",
   "equipment": ["equipment item 1", "equipment item 2"],
   "tradesAndFavors": "any favors, equipment loans, trade coordination, or assistance done for trade partners/subcontractors",
-  "notes": "combined string including delays, coordination items, discrepancies, and safety observations",
+  "notes": "delays, safety, coordination items, and general field notes only",
   "staCompleted": true or false (Short-Term Anchor / safety task assignment completed),
   "ocrPages": ["verbatim text from page 1", "verbatim text from page 2"]
 }
@@ -35,13 +39,17 @@ const SPOKEN_EXTRACTION_PROMPT = `You are a construction daily report parser. Th
 
 Extract structured data. Infer reasonable values when the speaker is informal (e.g. "eight guys" → workerCount 8, "STA is done" → staCompleted true).
 
+IMPORTANT FIELD DISTINCTIONS:
+- "locationDescription": MUST capture the location worked AND the specific work performed, installations completed, or tasks executed. In ProjectSight, this maps directly to "Location / Work Performed" on the labor card.
+- "notes": Reserved ONLY for weather stoppages, delays, roadblocks, safety issues, inspections, or general field notes. Never put descriptions of trade work or installations into notes.
+
 tradePartnerName must be the company the speaker named, even if it is unfamiliar or not a well-known contractor. Never replace it with an example company from a list.
 
 Return a JSON object with ONLY these fields (omit fields you cannot find or are unsure about):
 {
   "tradePartnerName": "company name string",
   "date": "YYYY-MM-DD format",
-  "locationDescription": "location or area worked",
+  "locationDescription": "location/area and work performed (e.g. Building B 3rd Floor - framed drywall and hung sheetrock)",
   "workerCount": number (headcount — total workers on site),
   "totalHours": number (total worker-hours for the day),
   "crewBreakdown": [{ "craft": "trade name", "count": number }],
@@ -49,7 +57,7 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
   "tierSubsSummary": "summary of tier subcontractors or 'None'",
   "equipment": ["equipment item 1", "equipment item 2"],
   "tradesAndFavors": "any favors, equipment loans, trade coordination, or assistance done for trade partners/subcontractors",
-  "notes": "combined string including delays, coordination items, discrepancies, and safety observations",
+  "notes": "delays, safety, coordination items, and general field notes only",
   "staCompleted": true or false (Short-Term Anchor / safety task assignment completed)
 }
 

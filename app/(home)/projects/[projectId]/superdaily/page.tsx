@@ -303,11 +303,27 @@ export default function SuperdailyPage() {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          header, nav, aside, .print\\:hidden {
+          header, nav, aside, .print\\:hidden, [role="navigation"] {
             display: none !important;
+          }
+          /* Ensure app layout wrappers don't reserve side/top margins or hide overflow */
+          body, html, main, #__next, div[class*="flex"] {
+            overflow: visible !important;
+            height: auto !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           .superdaily-print-only {
             display: block !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0.25in !important;
+            background: white !important;
+            z-index: 99999 !important;
           }
         }
       `}</style>

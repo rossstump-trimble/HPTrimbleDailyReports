@@ -1013,6 +1013,14 @@ export function getBowlingMatrix(
   for (const d of projectDailies) {
     const tName = (d.tradePartnerName || '').trim();
     const tId = d.tradePartnerId?.trim() || slugTradePartnerId(tName);
+    // Ignore placeholder 'General Contractor' records with 0 headcount
+    if (
+      tName.toLowerCase() === 'general contractor' &&
+      (d.workerCount ?? 0) === 0 &&
+      (d.totalHours ?? 0) === 0
+    ) {
+      continue;
+    }
     if (
       excludedSet.has(tName.toLowerCase()) ||
       excludedSet.has(tId.toLowerCase()) ||
@@ -1043,6 +1051,14 @@ export function getBowlingMatrix(
         r.tradePartnerId.toLowerCase() === trade.id.toLowerCase() ||
         r.tradePartnerName.toLowerCase() === trade.name.toLowerCase(),
     );
+
+    // Omit placeholder General Contractor rows if there are no reports or 0 hours across the month
+    if (
+      trade.name.toLowerCase() === 'general contractor' &&
+      (tradeReports.length === 0 || tradeReports.every((r) => (r.workerCount ?? 0) === 0 && (r.totalHours ?? 0) === 0))
+    ) {
+      continue;
+    }
 
     // Group reports by submitter (person)
     const submitterGroups = new Map<string, { key: string; displayName: string; reports: DailyReport[] }>();
