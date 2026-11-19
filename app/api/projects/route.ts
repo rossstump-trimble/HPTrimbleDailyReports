@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { getProjects, createProject, getCapacityStatus } from '@/lib/store';
 import { requireAuthResponse, getRequestAuthContext } from '@/lib/api-auth';
 import { getUserAccessiblePsProjects } from '@/lib/projectsight/project-access';
+import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
+import { SESSION_COOKIE, AUTH_COOKIE } from '@/lib/local-session';
 
 export const runtime = 'nodejs';
 
@@ -18,8 +21,15 @@ export async function GET(req: Request) {
     if (!auth.isAdmin && auth.email) {
       const userEmail = auth.email.toLowerCase();
       let userPsProjectIds: Set<string> | null = null;
-      if (auth.accessToken) {
-        userPsProjectIds = await getUserAccessiblePsProjects(auth.accessToken, projects).catch(() => null);
+      try {
+        const jar = cookies();
+        const rawCookie = jar.get(SESSION_COOKIE)?.value || jar.get(AUTH_COOKIE)?.value;
+        const tokenRes = await getValidTidAccessToken(rawCookie);
+        if (tokenRes.token) {
+          userPsProjectIds = await getUserAccessiblePsProjects(tokenRes.token, projects).catch(() => null);
+        }
+      } catch {
+        // ignore token lookup error
       }
 
       projects = projects.filter((p) => {
