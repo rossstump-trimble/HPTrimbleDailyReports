@@ -29,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ShowMeTour from "@/components/common/ShowMeTour";
 import {
   Dialog,
   DialogContent,
@@ -251,8 +250,6 @@ export default function ReviewQueuePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <ShowMeTour tourId="review" />
-
           <Button
             variant="outline"
             size="sm"

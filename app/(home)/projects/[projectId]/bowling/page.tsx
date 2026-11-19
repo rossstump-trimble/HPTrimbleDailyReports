@@ -33,7 +33,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import ShowMeTour from "@/components/common/ShowMeTour";
 import { Label } from "@/components/ui/label";
 import { BowlingTable, BowlingRow } from "@/components/bowling/BowlingTable";
 import { MissingStaFollowUps } from "@/components/dashboard/MissingStaFollowUps";
@@ -500,8 +499,6 @@ export default function BowlingPage() {
             className="text-sm border border-input rounded-md px-2 py-1 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-
-        <ShowMeTour tourId="bowling" />
 
         <Button
           variant="outline"

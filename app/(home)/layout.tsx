@@ -3,6 +3,7 @@ import React from "react";
 import ProjectSightHeaderHome from "@/components/projectsight/ProjectSightHeaderHome";
 import ProjectSightNavigation from "@/components/projectsight/ProjectSightNavigation";
 import PageWrapper from "@/components/PageWrapper";
+import ShowMeTour from "@/components/common/ShowMeTour";
 
 export default function ProjectSightLayout({
   children,
@@ -32,6 +33,7 @@ export default function ProjectSightLayout({
           {children}
         </main>
       </div>
+      <ShowMeTour />
     </PageWrapper>
   );
 }
