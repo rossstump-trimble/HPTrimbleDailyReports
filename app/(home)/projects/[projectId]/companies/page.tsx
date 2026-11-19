@@ -90,7 +90,63 @@ export default function CompaniesPage() {
   const [editingCrewCompanyId, setEditingCrewCompanyId] = useState<string | null>(null);
   const [crewInputValue, setCrewInputValue] = useState("");
 
-  const handleSaveCrew = async (companyId: string, crewName: string) => {
+  const handleAddCrew = async (companyId: string, crewName: string) => {
+    if (!crewName.trim()) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/companies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add-crew",
+          companyId,
+          crewName: crewName.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to add crew");
+      }
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === companyId ? json.company : c)),
+      );
+      setCrewInputValue("");
+      setFeedback({ type: "success", text: `Added crew "${crewName.trim()}".` });
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not add crew.",
+      });
+    }
+  };
+
+  const handleDeleteCrew = async (companyId: string, crewId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/companies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete-crew",
+          companyId,
+          crewId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to delete crew");
+      }
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === companyId ? json.company : c)),
+      );
+      setFeedback({ type: "success", text: "Crew removed." });
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not remove crew.",
+      });
+    }
+  };
+
+  const handleSetDefaultCrew = async (companyId: string, crewName: string) => {
     try {
       const res = await fetch(`/api/projects/${projectId}/companies`, {
         method: "POST",
@@ -98,22 +154,21 @@ export default function CompaniesPage() {
         body: JSON.stringify({
           action: "update-crew",
           companyId,
-          defaultCrewName: crewName.trim(),
+          defaultCrewName: crewName,
         }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.error || "Failed to update designated crew");
+        throw new Error(json.error || "Failed to set default crew");
       }
       setCompanies((prev) =>
-        prev.map((c) => (c.id === companyId ? { ...c, defaultCrewName: crewName.trim() || undefined } : c)),
+        prev.map((c) => (c.id === companyId ? { ...c, defaultCrewName: crewName } : c)),
       );
-      setEditingCrewCompanyId(null);
-      setFeedback({ type: "success", text: "Updated designated crew for company." });
+      setFeedback({ type: "success", text: `Default crew set to "${crewName}".` });
     } catch (err) {
       setFeedback({
         type: "error",
-        text: err instanceof Error ? err.message : "Could not update crew.",
+        text: err instanceof Error ? err.message : "Could not update default crew.",
       });
     }
   };
@@ -681,56 +736,115 @@ export default function CompaniesPage() {
                     {/* Expandable Contacts & Crew section */}
                     {isExpanded && (
                       <div className="bg-slate-50 border-t border-slate-100 px-12 py-3 space-y-3">
-                        {/* Designated Crew Bar */}
-                        <div className="bg-white p-2.5 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="w-4 h-4 text-[#0063a3] shrink-0" />
-                            <div>
-                              <span className="font-semibold text-slate-800">Designated ProjectSight Crew:</span>{" "}
-                              <strong className="text-[#0063a3]">{company.defaultCrewName || "Main Crew (Default)"}</strong>
-                              <p className="text-[11px] text-slate-400">
-                                Labor cards synced to ProjectSight will use this crew name instead of defaulting to the first crew on file.
-                              </p>
+                        {/* Multiple Crews Roster Bar */}
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2.5 text-xs">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Wrench className="w-4 h-4 text-[#0063a3] shrink-0" />
+                              <div>
+                                <span className="font-semibold text-slate-800">ProjectSight Crew Roster</span>{" "}
+                                <span className="text-[11px] text-slate-500">
+                                  ({(company.crews || []).length} registered) · Primary:{" "}
+                                  <strong className="text-[#0063a3]">{company.defaultCrewName || "Main Crew"}</strong>
+                                </span>
+                              </div>
                             </div>
+                            <span className="text-[11px] text-slate-400">
+                              Trade submitters can pick their crew during intake
+                            </span>
                           </div>
-                          {editingCrewCompanyId === company.id ? (
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <Input
-                                value={crewInputValue}
-                                onChange={(e) => setCrewInputValue(e.target.value)}
-                                placeholder="e.g. Framing Crew A"
-                                className="h-7 text-xs w-44"
-                              />
+
+                          {/* Crew list badges */}
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            {/* Default Crew Badge if no custom list */}
+                            {(!company.crews || company.crews.length === 0) && (
+                              <Badge variant="secondary" className="text-xs font-medium py-1 px-2.5 bg-blue-50 text-[#0063a3] border border-blue-200">
+                                <span>{company.defaultCrewName || "Main Crew (Default)"}</span>
+                              </Badge>
+                            )}
+
+                            {(company.crews || []).map((cr) => {
+                              const isDefault = company.defaultCrewName?.toLowerCase() === cr.name.toLowerCase();
+                              return (
+                                <div
+                                  key={cr.id}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border transition-colors ${
+                                    isDefault
+                                      ? "bg-blue-50 text-[#0063a3] border-[#0063a3]/40 font-bold"
+                                      : "bg-slate-50 text-slate-700 border-slate-200"
+                                  }`}
+                                >
+                                  <span>{cr.name}</span>
+                                  {isDefault ? (
+                                    <span className="text-[9px] uppercase px-1 rounded bg-[#0063a3] text-white">Default</span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleSetDefaultCrew(company.id, cr.name)}
+                                      className="text-slate-400 hover:text-amber-500 text-[10px]"
+                                      title="Set as default crew"
+                                    >
+                                      ★
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleDeleteCrew(company.id, cr.id)}
+                                    className="text-slate-400 hover:text-red-600 ml-0.5"
+                                    title="Delete crew"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              );
+                            })}
+
+                            {/* Add Crew inline input */}
+                            {editingCrewCompanyId === company.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  value={crewInputValue}
+                                  onChange={(e) => setCrewInputValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      void handleAddCrew(company.id, crewInputValue);
+                                    }
+                                  }}
+                                  placeholder="Crew name (e.g. Crew B)..."
+                                  className="h-7 text-xs w-44"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => void handleAddCrew(company.id, crewInputValue)}
+                                  className="h-7 px-2 text-xs bg-[#0063a3] hover:bg-[#004f83] text-white"
+                                >
+                                  Add
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingCrewCompanyId(null)}
+                                  className="h-7 px-2 text-xs text-slate-500"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
                               <Button
+                                variant="outline"
                                 size="sm"
-                                onClick={() => void handleSaveCrew(company.id, crewInputValue)}
-                                className="h-7 px-2 text-xs"
+                                onClick={() => {
+                                  setEditingCrewCompanyId(company.id);
+                                  setCrewInputValue("");
+                                }}
+                                className="h-7 px-2 text-xs gap-1 border-dashed"
                               >
-                                Save
+                                <Plus className="w-3 h-3" />
+                                Add Another Crew
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setEditingCrewCompanyId(null)}
-                                className="h-7 px-2 text-xs text-slate-500"
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditingCrewCompanyId(company.id);
-                                setCrewInputValue(company.defaultCrewName || "Main Crew");
-                              }}
-                              className="h-7 px-2.5 text-xs gap-1 shrink-0"
-                            >
-                              <Wrench className="w-3 h-3" />
-                              Configure Crew
-                            </Button>
-                          )}
+                            )}
+                          </div>
                         </div>
 
                         <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">

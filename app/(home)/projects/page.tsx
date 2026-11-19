@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import QrCodeView from "@/components/common/QrCodeView";
 import NewProjectModal from "@/components/projects/NewProjectModal";
 import EditProjectModal from "@/components/projects/EditProjectModal";
+import ShowMeTour from "@/components/common/ShowMeTour";
 import {
   ACTIVE_PROJECT_EVENT,
   clearRememberedProjectIfMatches,
@@ -295,6 +296,8 @@ export default function ProjectsPage() {
               <span className="hidden sm:inline">List</span>
             </Button>
           </div>
+
+          <ShowMeTour tourId="projects" />
 
           <Button
             size="sm"

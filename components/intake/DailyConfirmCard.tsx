@@ -450,7 +450,7 @@ export default function DailyConfirmCard({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <FieldLabel required>Reporter / Author (Foreman / Lead)</FieldLabel>
             <FieldInput
@@ -481,6 +481,28 @@ export default function DailyConfirmCard({
               value={data.date}
               onChange={(v) => set("date", v)}
             />
+          </div>
+          <div>
+            <FieldLabel>Designated Crew</FieldLabel>
+            {matchedPartner?.crews && matchedPartner.crews.length > 0 ? (
+              <select
+                value={data.crewName || matchedPartner.defaultCrewName || matchedPartner.crews[0].name}
+                onChange={(e) => set("crewName", e.target.value)}
+                className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              >
+                {matchedPartner.crews.map((cr) => (
+                  <option key={cr.id} value={cr.name}>
+                    {cr.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <FieldInput
+                value={data.crewName || matchedPartner?.defaultCrewName || ""}
+                onChange={(v) => set("crewName", v)}
+                placeholder="e.g. Framing Crew A"
+              />
+            )}
           </div>
         </div>
       </Section>

@@ -17,6 +17,8 @@ export interface TradePartner {
   category?: string;
   companyName?: string;
   submitterName?: string;
+  crews?: CompanyCrew[];
+  defaultCrewName?: string;
 }
 
 export interface CompanyContact {

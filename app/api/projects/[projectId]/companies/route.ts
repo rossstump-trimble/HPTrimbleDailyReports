@@ -118,10 +118,9 @@ export async function POST(
 
     const action = body.action || 'sync-connected';
 
-    // Action: Update company crew
-    if (action === 'update-crew') {
+    // Action: Update company crew / multiple crews
+    if (action === 'update-crew' || action === 'update-crews') {
       const companyId = (body.companyId || body.id || '').trim();
-      const defaultCrewName = (body.defaultCrewName || '').trim();
       if (!companyId) {
         return NextResponse.json({ success: false, error: 'companyId is required' }, { status: 400 });
       }
@@ -132,12 +131,80 @@ export async function POST(
       if (!match) {
         return NextResponse.json({ success: false, error: 'Company not found' }, { status: 404 });
       }
-      match.defaultCrewName = defaultCrewName || undefined;
+      if (body.defaultCrewName !== undefined) {
+        match.defaultCrewName = body.defaultCrewName.trim() || undefined;
+      }
+      if (Array.isArray((body as Record<string, unknown>).crews)) {
+        match.crews = ((body as Record<string, unknown>).crews as Array<{ id?: string; name: string; psCrewId?: number }>)
+          .filter((cr) => cr && cr.name?.trim())
+          .map((cr) => ({
+            id: cr.id || `cr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            name: cr.name.trim(),
+            psCrewId: cr.psCrewId ? Number(cr.psCrewId) : undefined,
+          }));
+      }
       setProjectCompanies(projectId, current);
       return NextResponse.json({
         success: true,
         company: match,
-        message: `Updated default crew for "${match.name}".`,
+        message: `Updated crews for "${match.name}".`,
+      });
+    }
+
+    if (action === 'add-crew') {
+      const companyId = (body.companyId || body.id || '').trim();
+      const crewName = (String((body as Record<string, unknown>).crewName || body.defaultCrewName || '')).trim();
+      if (!companyId || !crewName) {
+        return NextResponse.json({ success: false, error: 'companyId and crewName are required' }, { status: 400 });
+      }
+      const current = getProjectCompanies(projectId);
+      const match = current.find(
+        (c) => c.id.toLowerCase() === companyId.toLowerCase() || c.name.toLowerCase() === companyId.toLowerCase(),
+      );
+      if (!match) {
+        return NextResponse.json({ success: false, error: 'Company not found' }, { status: 404 });
+      }
+      if (!match.crews) match.crews = [];
+      const newCrew: CompanyCrew = {
+        id: `cr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: crewName,
+        psCrewId: (body as Record<string, unknown>).psCrewId ? Number((body as Record<string, unknown>).psCrewId) : undefined,
+      };
+      match.crews.push(newCrew);
+      if (!match.defaultCrewName) {
+        match.defaultCrewName = crewName;
+      }
+      setProjectCompanies(projectId, current);
+      return NextResponse.json({
+        success: true,
+        company: match,
+        crew: newCrew,
+        message: `Added crew "${crewName}" to "${match.name}".`,
+      });
+    }
+
+    if (action === 'delete-crew') {
+      const companyId = (body.companyId || body.id || '').trim();
+      const crewId = String((body as Record<string, unknown>).crewId || '').trim();
+      if (!companyId || !crewId) {
+        return NextResponse.json({ success: false, error: 'companyId and crewId are required' }, { status: 400 });
+      }
+      const current = getProjectCompanies(projectId);
+      const match = current.find(
+        (c) => c.id.toLowerCase() === companyId.toLowerCase() || c.name.toLowerCase() === companyId.toLowerCase(),
+      );
+      if (!match) {
+        return NextResponse.json({ success: false, error: 'Company not found' }, { status: 404 });
+      }
+      match.crews = (match.crews || []).filter((cr) => cr.id !== crewId && cr.name.toLowerCase() !== crewId.toLowerCase());
+      if (match.defaultCrewName && !match.crews.some((cr) => cr.name === match.defaultCrewName)) {
+        match.defaultCrewName = match.crews[0]?.name;
+      }
+      setProjectCompanies(projectId, current);
+      return NextResponse.json({
+        success: true,
+        company: match,
+        message: `Deleted crew from "${match.name}".`,
       });
     }
 

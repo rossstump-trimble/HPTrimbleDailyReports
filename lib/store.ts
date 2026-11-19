@@ -377,7 +377,13 @@ export function updateProjectTradePartners(
 function syncTradePartnersFromCompanies(proj: Project): void {
   proj.tradePartners = (proj.availableCompanies || [])
     .filter(c => c.isTracked)
-    .map(c => ({ id: c.id, name: c.name, category: c.trade }));
+    .map(c => ({
+      id: c.id,
+      name: c.name,
+      category: c.trade,
+      crews: c.crews,
+      defaultCrewName: c.defaultCrewName,
+    }));
 }
 
 export function getProjectCompanies(

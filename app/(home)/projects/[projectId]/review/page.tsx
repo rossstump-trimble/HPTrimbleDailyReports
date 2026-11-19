@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ShowMeTour from "@/components/common/ShowMeTour";
 import {
   Dialog,
   DialogContent,
@@ -249,6 +250,8 @@ export default function ReviewQueuePage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <ShowMeTour tourId="review" />
+
           <Button
             variant="outline"
             size="sm"
@@ -429,6 +432,11 @@ export default function ReviewQueuePage() {
                             {report.isHpEmployee && (
                               <Badge className="bg-[#0063a3] text-white hover:bg-[#0063a3] text-[10px] py-0 h-4 font-bold">
                                 Hensel Phelps Staff
+                              </Badge>
+                            )}
+                            {report.crewName && (
+                              <Badge variant="outline" className="text-[10px] py-0 h-4 font-mono text-[#0063a3] border-blue-200">
+                                Crew: {report.crewName}
                               </Badge>
                             )}
                             {isVerified ? (
@@ -757,6 +765,19 @@ export default function ReviewQueuePage() {
                     <option value="no">No</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">ProjectSight Designated Crew</Label>
+                <Input
+                  type="text"
+                  value={selectedReport.crewName || ""}
+                  onChange={(e) =>
+                    setSelectedReport({ ...selectedReport, crewName: e.target.value })
+                  }
+                  placeholder="e.g. Framing Crew A (or leave default)"
+                  className="text-xs"
+                />
               </div>
 
               <div className="space-y-1">
