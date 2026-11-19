@@ -56,29 +56,8 @@ export async function sendFog617ToProjectSight(
     console.warn('[sendFog617ToProjectSight] weather fetch fallback', wErr);
   }
 
-  // Auto-resolve ProjectSight LocationID if not explicitly set and active project locations are available
-  if (args.capture.psLocationId == null && args.capture.locationDescription) {
-    try {
-      const locations = await listProjectLocations(args.token, args.portfolioId, args.projectId);
-      if (locations.length > 0) {
-        const text = args.capture.locationDescription.toLowerCase();
-        // Match only verified complete location names from the active project location hierarchy
-        const sorted = [...locations].sort((a, b) => b.name.length - a.name.length);
-        const match = sorted.find((loc) => {
-          if (!loc.name || loc.name.length < 3) return false;
-          return text.includes(loc.name.toLowerCase());
-        });
-        if (match?.id) {
-          const numId = Number(match.id);
-          if (Number.isFinite(numId)) {
-            args.capture.psLocationId = numId;
-          }
-        }
-      }
-    } catch {
-      // Ignore location resolution fallback error
-    }
-  }
+  // Do not guess or auto-resolve numeric LocationID until verified with active ProjectSight API testing
+  // ProjectSight requires valid active LocationIDs; text locations are preserved in WorkPerformed and LocationDescription.
 
   let created;
   try {
