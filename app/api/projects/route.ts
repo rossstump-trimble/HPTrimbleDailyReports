@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProjects, createProject, getCapacityStatus } from '@/lib/store';
-import { requireAuthResponse } from '@/lib/api-auth';
+import { requireAuthResponse, getRequestAuthContext } from '@/lib/api-auth';
+import { getUserAccessiblePsProjects } from '@/lib/projectsight/project-access';
 
 export const runtime = 'nodejs';
 
@@ -9,8 +10,38 @@ export async function GET(req: Request) {
   if (denied) return denied;
 
   try {
-    const projects = getProjects();
+    const auth = getRequestAuthContext(req);
     const capacity = getCapacityStatus();
+    let projects = getProjects();
+
+    // If not a system administrator, filter projects by user permissions
+    if (!auth.isAdmin && auth.email) {
+      const userEmail = auth.email.toLowerCase();
+      let userPsProjectIds: Set<string> | null = null;
+      if (auth.accessToken) {
+        userPsProjectIds = await getUserAccessiblePsProjects(auth.accessToken, projects).catch(() => null);
+      }
+
+      projects = projects.filter((p) => {
+        // 1. Explicitly allowed email exceptions on this project
+        if (p.allowedUserEmails && p.allowedUserEmails.length > 0) {
+          const allowed = p.allowedUserEmails.map((e) => e.toLowerCase());
+          if (allowed.includes(userEmail)) return true;
+        }
+
+        // 2. Restricted to ProjectSight assigned project users
+        if (p.restrictToAssignedUsers && p.psProjectId) {
+          if (userPsProjectIds) {
+            return userPsProjectIds.has(String(p.psProjectId).toLowerCase());
+          }
+          return false;
+        }
+
+        // 3. Unrestricted / demo projects
+        return true;
+      });
+    }
+
     return NextResponse.json({
       projects,
       capacity,
@@ -33,6 +64,8 @@ export async function POST(req: Request) {
       tradePartners?: Array<{ id: string; name: string; contactEmail?: string; category?: string }>;
       psPortfolioId?: string;
       psProjectId?: string;
+      restrictToAssignedUsers?: boolean;
+      allowedUserEmails?: string[];
     };
 
     if (!body.name || !body.name.trim()) {

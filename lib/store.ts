@@ -320,6 +320,12 @@ export function updateProject(
   if (updates.psProjectId !== undefined) proj.psProjectId = String(updates.psProjectId).trim() || undefined;
   if (Array.isArray(updates.workingDays)) proj.workingDays = updates.workingDays;
   if (Array.isArray(updates.keywords)) proj.keywords = updates.keywords;
+  if (Array.isArray(updates.allowedUserEmails)) {
+    proj.allowedUserEmails = Array.from(new Set(updates.allowedUserEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
+  }
+  if (updates.restrictToAssignedUsers !== undefined) {
+    proj.restrictToAssignedUsers = Boolean(updates.restrictToAssignedUsers);
+  }
 
   saveStore(store, filePath);
   return proj;

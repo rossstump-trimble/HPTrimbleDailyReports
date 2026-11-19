@@ -51,6 +51,8 @@ export async function PATCH(req: Request, { params }: { params: { projectId: str
       psProjectId?: string;
       workingDays?: number[];
       keywords?: string[];
+      restrictToAssignedUsers?: boolean;
+      allowedUserEmails?: string[];
       tradePartners?: Array<{ id: string; name: string; contactEmail?: string; category?: string }>;
     };
 
@@ -66,6 +68,8 @@ export async function PATCH(req: Request, { params }: { params: { projectId: str
       psProjectId: body.psProjectId,
       workingDays: body.workingDays,
       keywords: body.keywords,
+      restrictToAssignedUsers: body.restrictToAssignedUsers,
+      allowedUserEmails: body.allowedUserEmails,
     }) ?? updated;
 
     if (body.tradePartners && Array.isArray(body.tradePartners)) {

@@ -12,7 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Save, Calendar, Link2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Building2, Save, Calendar, Link2, ShieldCheck, Lock } from "lucide-react";
 import type { Project } from "@/types/hpproto";
 
 interface EditProjectModalProps {
@@ -43,6 +44,8 @@ export default function EditProjectModal({
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [psPortfolioId, setPsPortfolioId] = useState("");
   const [psProjectId, setPsProjectId] = useState("");
+  const [restrictToAssignedUsers, setRestrictToAssignedUsers] = useState(false);
+  const [allowedEmailsStr, setAllowedEmailsStr] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -53,6 +56,8 @@ export default function EditProjectModal({
       setWorkingDays(project.workingDays || [1, 2, 3, 4, 5]);
       setPsPortfolioId(project.psPortfolioId || "");
       setPsProjectId(project.psProjectId || "");
+      setRestrictToAssignedUsers(Boolean(project.restrictToAssignedUsers));
+      setAllowedEmailsStr((project.allowedUserEmails || []).join(", "));
       setError("");
     }
   }, [project, open]);
@@ -75,6 +80,11 @@ export default function EditProjectModal({
     setError("");
 
     try {
+      const allowedEmails = allowedEmailsStr
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+
       const res = await fetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -84,6 +94,8 @@ export default function EditProjectModal({
           workingDays,
           psPortfolioId: psPortfolioId.trim() || undefined,
           psProjectId: psProjectId.trim() || undefined,
+          restrictToAssignedUsers,
+          allowedUserEmails: allowedEmails,
         }),
       });
 
@@ -203,6 +215,43 @@ export default function EditProjectModal({
                   className="text-xs font-mono bg-background"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Project Access & Security Permissions */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-3 bg-muted/20">
+            <div className="flex items-center justify-between gap-2">
+              <div className="space-y-0.5">
+                <Label htmlFor="restrict-ps-users" className="text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
+                  <ShieldCheck className="h-3.5 w-3.5 text-[#0063a3]" />
+                  <span>Match ProjectSight Project Access</span>
+                </Label>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Restrict visibility so only Hensel Phelps staff assigned to this project in ProjectSight can view or access it.
+                </p>
+              </div>
+              <Switch
+                id="restrict-ps-users"
+                checked={restrictToAssignedUsers}
+                onCheckedChange={setRestrictToAssignedUsers}
+              />
+            </div>
+
+            <div className="space-y-1 pt-1 border-t border-border">
+              <Label htmlFor="edit-allowed-emails" className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                <Lock className="h-3 w-3" />
+                Additional Authorized User Emails (Optional)
+              </Label>
+              <Input
+                id="edit-allowed-emails"
+                value={allowedEmailsStr}
+                onChange={(e) => setAllowedEmailsStr(e.target.value)}
+                placeholder="user1@henselphelps.com, user2@henselphelps.com"
+                className="text-xs font-mono bg-background"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                System administrators (@henselphelps.com admins) always retain global access.
+              </p>
             </div>
           </div>
 
