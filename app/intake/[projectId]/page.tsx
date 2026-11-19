@@ -119,17 +119,17 @@ function TrimbleHeader({
 }) {
   return (
     <header
-      className="flex items-center gap-3 px-4 py-3 flex-none"
+      className="flex items-center gap-2 px-3 py-3 flex-none sm:gap-3 sm:px-4"
       style={{ backgroundColor: "#1b3a5c" }}
     >
       {tidReady && (
         <Link
           href="/projects"
-          className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition px-3 py-1.5 text-xs font-semibold text-white mr-1"
+          className="flex flex-none items-center gap-1.5 whitespace-nowrap rounded-lg bg-white/10 hover:bg-white/20 transition px-2 sm:px-3 py-1.5 text-xs font-semibold text-white sm:mr-1"
           aria-label="Back to Main Menu"
         >
           <ArrowLeft size={16} />
-          <span>Main Menu</span>
+          <span className="hidden sm:inline">Main Menu</span>
         </Link>
       )}
 
@@ -140,11 +140,11 @@ function TrimbleHeader({
           width={130}
           height={28}
           priority
-          className="h-6 w-auto object-contain"
+          className="h-5 w-auto flex-none object-contain sm:h-6"
           style={{ mixBlendMode: "screen" }}
         />
-        <span className="text-white/40 text-sm font-light">|</span>
-        <span translate="no" className="text-white text-sm font-semibold truncate">
+        <span className="hidden text-white/40 text-sm font-light sm:inline">|</span>
+        <span translate="no" className="hidden text-white text-sm font-semibold truncate sm:inline">
           {projectName || "Daily Intake"}
         </span>
       </div>
@@ -166,7 +166,7 @@ function StepIndicator({ step }: { step: Step }) {
   const currentIndex = steps.findIndex((s) => s.key === step);
 
   return (
-    <div className="flex items-center justify-center gap-2 py-4 px-4">
+    <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 py-4 px-4">
       {steps.map((s, i) => (
         <div key={s.key} className="flex items-center gap-2">
           <div className="flex items-center gap-1.5">
@@ -185,7 +185,7 @@ function StepIndicator({ step }: { step: Step }) {
               className={`text-xs font-medium ${
                 i === currentIndex
                   ? "text-[#0063a3] dark:text-blue-400 font-semibold"
-                  : "text-gray-400 dark:text-gray-500"
+                  : "hidden sm:inline text-gray-400 dark:text-gray-500"
               }`}
             >
               {s.label}
@@ -291,7 +291,7 @@ function SuccessCard({
 
 export default function IntakePage() {
   return (
-    <IntakeLanguageProvider className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-foreground">
+    <IntakeLanguageProvider className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-foreground break-words">
       <IntakePageBody />
     </IntakeLanguageProvider>
   );
@@ -763,8 +763,8 @@ function IntakePageBody() {
             ) : (
               /* ── 4 Mode Tabs: Speak Freely -> Guided Q&A -> Photo/File -> Form Entry ── */
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
-                  <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+                  <div className="flex min-w-0 flex-1 basis-48 items-center gap-2.5">
                     <ClipboardCheck className="h-5 w-5 text-[#0063a3] dark:text-blue-400 shrink-0" />
                     <div>
                       <div className="text-xs font-semibold text-gray-900 dark:text-gray-100">
@@ -776,7 +776,7 @@ function IntakePageBody() {
                     </div>
                   </div>
                   <Link href={`/projects/${projectId}/inspections`}>
-                    <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 shrink-0">
+                    <Button size="sm" variant="outline" className="h-auto min-h-8 gap-1.5 whitespace-normal py-1.5 text-center text-xs">
                       <Camera className="h-3.5 w-3.5" /> Scan Sheet
                     </Button>
                   </Link>
@@ -790,10 +790,10 @@ function IntakePageBody() {
                   }}
                   className="w-full"
                 >
-                <TabsList className="grid h-12 w-full grid-cols-4 rounded-2xl bg-gray-200/70 dark:bg-gray-800 p-1">
+                <TabsList className="grid h-auto w-full grid-cols-4 items-stretch rounded-2xl bg-gray-200/70 dark:bg-gray-800 p-1">
                   <TabsTrigger
                     value="stream"
-                    className="rounded-xl text-xs font-semibold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
+                    className="h-auto min-h-10 min-w-0 flex-col gap-1 whitespace-normal break-words rounded-xl px-1 py-1.5 text-center text-xs font-semibold leading-tight sm:flex-row sm:gap-1.5 sm:px-3 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
                   >
                     <Mic className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Speak Freely</span>
@@ -801,7 +801,7 @@ function IntakePageBody() {
                   </TabsTrigger>
                   <TabsTrigger
                     value="interview"
-                    className="rounded-xl text-xs font-semibold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
+                    className="h-auto min-h-10 min-w-0 flex-col gap-1 whitespace-normal break-words rounded-xl px-1 py-1.5 text-center text-xs font-semibold leading-tight sm:flex-row sm:gap-1.5 sm:px-3 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
                   >
                     <ListOrdered className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Guided Q&amp;A</span>
@@ -809,7 +809,7 @@ function IntakePageBody() {
                   </TabsTrigger>
                   <TabsTrigger
                     value="file"
-                    className="rounded-xl text-xs font-semibold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
+                    className="h-auto min-h-10 min-w-0 flex-col gap-1 whitespace-normal break-words rounded-xl px-1 py-1.5 text-center text-xs font-semibold leading-tight sm:flex-row sm:gap-1.5 sm:px-3 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
                   >
                     <Camera className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Photo / File</span>
@@ -817,7 +817,7 @@ function IntakePageBody() {
                   </TabsTrigger>
                   <TabsTrigger
                     value="form"
-                    className="rounded-xl text-xs font-semibold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
+                    className="h-auto min-h-10 min-w-0 flex-col gap-1 whitespace-normal break-words rounded-xl px-1 py-1.5 text-center text-xs font-semibold leading-tight sm:flex-row sm:gap-1.5 sm:px-3 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900 shadow-sm"
                   >
                     <FileEdit className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Form Entry</span>
@@ -850,10 +850,10 @@ function IntakePageBody() {
                     <Button
                       type="button"
                       onClick={() => startInterview("guided")}
-                      className="w-full text-white font-semibold gap-2 h-11 rounded-xl"
+                      className="h-auto min-h-11 w-full whitespace-normal rounded-xl py-2 text-center font-semibold text-white gap-2"
                       style={{ backgroundColor: "#0063a3" }}
                     >
-                      <Sparkles className="h-4 w-4" />
+                      <Sparkles className="h-4 w-4 shrink-0" />
                       Start Guided Interview
                     </Button>
                   </div>
@@ -1012,16 +1012,16 @@ function IntakePageBody() {
 
             {showSourceTab ? (
               <Tabs defaultValue="form" className="w-full">
-                <TabsList className="grid h-11 w-full grid-cols-2 rounded-xl bg-gray-200 dark:bg-gray-800 p-1">
+                <TabsList className="grid h-auto w-full grid-cols-2 items-stretch rounded-xl bg-gray-200 dark:bg-gray-800 p-1">
                   <TabsTrigger
                     value="form"
-                    className="rounded-lg border-b-0 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900"
+                    className="min-w-0 whitespace-normal break-words rounded-lg border-b-0 text-center leading-tight data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900"
                   >
                     Form
                   </TabsTrigger>
                   <TabsTrigger
                     value="source"
-                    className="rounded-lg border-b-0 data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900"
+                    className="min-w-0 whitespace-normal break-words rounded-lg border-b-0 text-center leading-tight data-[state=active]:bg-white data-[state=active]:text-[#0063a3] dark:data-[state=active]:bg-gray-900"
                   >
                     Source &amp; OCR
                   </TabsTrigger>

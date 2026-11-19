@@ -361,11 +361,11 @@ export default function VoiceInterview({
       </div>
 
       {/* Speech Mode Toggle: Built-in Speech (Default) vs Cloud Audio */}
-      <div className="flex items-center justify-between gap-2 p-1.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-800 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-1.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-800 text-xs">
         <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 pl-1.5">
           Speech Mode
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <button
             type="button"
             onClick={() => setSttEngine("phone")}
