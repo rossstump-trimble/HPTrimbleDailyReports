@@ -139,13 +139,6 @@ export function mapFog617ToProjectSightBody(
         item.Crew = capture.crewName;
         item.CrewName = capture.crewName;
       }
-      if (capture.psLocationId != null || capture.locationId != null) {
-        const lid = capture.psLocationId ?? Number(capture.locationId);
-        if (Number.isFinite(lid)) {
-          item.LocationID = lid;
-          item.LocationId = lid;
-        }
-      }
       dailyWorksItems.push(item);
     }
   } else {
@@ -179,13 +172,6 @@ export function mapFog617ToProjectSightBody(
       item.Crew = capture.crewName;
       item.CrewName = capture.crewName;
     }
-    if (capture.psLocationId != null || capture.locationId != null) {
-      const lid = capture.psLocationId ?? Number(capture.locationId);
-      if (Number.isFinite(lid)) {
-        item.LocationID = lid;
-        item.LocationId = lid;
-      }
-    }
     dailyWorksItems.push(item);
   }
 
@@ -199,13 +185,6 @@ export function mapFog617ToProjectSightBody(
     DailyWorks: dailyWorksItems,
     Works: dailyWorksItems,
   };
-  if (capture.psLocationId != null || capture.locationId != null) {
-    const lid = capture.psLocationId ?? Number(capture.locationId);
-    if (Number.isFinite(lid)) {
-      payload.LocationID = lid;
-      payload.LocationId = lid;
-    }
-  }
   if (effectiveLocation) {
     payload.Location = effectiveLocation;
     payload.LocationDescription = effectiveLocation;

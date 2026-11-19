@@ -118,14 +118,12 @@ describe('mapFog617ToProjectSightBody', () => {
     expect(manualWorks[0].CompanyName).toBe('Brand New Manual Sub');
   });
 
-  it('assigns designated Crew, CrewID, and LocationID to labor cards when present', () => {
+  it('assigns designated Crew and CrewID to labor cards when present and preserves text location without numeric LocationID', () => {
     const captureWithCrewAndLoc: Fog617Capture = {
       tradePartnerName: 'Titan Iron',
       psCompanyId: 1042,
       crewName: 'Tier 2 Framing Crew',
       psCrewId: 508,
-      locationId: '204',
-      psLocationId: 204,
       locationDescription: 'Corridor Level 2',
       date: '2026-11-16',
       workerCount: 4,
@@ -137,7 +135,10 @@ describe('mapFog617ToProjectSightBody', () => {
     expect(works[0].Crew).toBe('Tier 2 Framing Crew');
     expect(works[0].CrewName).toBe('Tier 2 Framing Crew');
     expect(works[0].CrewID).toBe(508);
-    expect(works[0].LocationID).toBe(204);
-    expect(body.LocationID).toBe(204);
+    expect(works[0].LocationID).toBeUndefined();
+    expect(works[0].Location).toBe('Corridor Level 2');
+    expect(works[0].WorkPerformed).toContain('Corridor Level 2');
+    expect(body.LocationID).toBeUndefined();
+    expect(body.Location).toBe('Corridor Level 2');
   });
 });
