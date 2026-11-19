@@ -98,7 +98,7 @@ describe('createDomTranslator', () => {
     await vi.waitFor(() => expect(root.querySelectorAll('p')[69].textContent?.endsWith('!')).toBe(true));
 
     expect(calls.reduce((a, b) => a + b, 0)).toBe(70);
-    expect(Math.max(...calls)).toBeLessThanOrEqual(30);
+    expect(Math.max(...calls)).toBeLessThanOrEqual(12);
   });
 
   it('leaves entered content, translate="no" content and identifiers alone', async () => {
