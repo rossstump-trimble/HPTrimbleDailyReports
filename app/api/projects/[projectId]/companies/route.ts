@@ -101,7 +101,7 @@ export async function POST(
     }
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: 'sync-connected' | 'preview-sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete' | 'toggle-tracking' | 'update-crew';
+      action?: 'sync-connected' | 'preview-sync-connected' | 'clear' | 'add' | 'copy-from-project' | 'delete' | 'toggle-tracking' | 'update-crew' | 'update-crews' | 'add-crew' | 'delete-crew';
       sourceProjectId?: string;
       sourcePortfolioId?: string;
       name?: string;
@@ -114,6 +114,10 @@ export async function POST(
       trackImported?: boolean;
       selectedCompanyIds?: string[];
       defaultCrewName?: string;
+      crews?: Array<{ id?: string; name: string; psCrewId?: number }>;
+      crewName?: string;
+      crewId?: string;
+      psCrewId?: number;
     };
 
     const action = body.action || 'sync-connected';
