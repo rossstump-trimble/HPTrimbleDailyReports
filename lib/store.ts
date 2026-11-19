@@ -305,6 +305,26 @@ export function updateAccessControl(
   return next;
 }
 
+export function updateProject(
+  projectId: string,
+  updates: Partial<Project>,
+  filePath: string = getDefaultDbPath(),
+): Project | undefined {
+  const store = getStore(filePath);
+  const proj = store.projects.find(p => p.id.toLowerCase() === projectId.toLowerCase());
+  if (!proj) return undefined;
+
+  if (updates.name !== undefined && String(updates.name).trim()) proj.name = String(updates.name).trim();
+  if (updates.code !== undefined) proj.code = String(updates.code).trim();
+  if (updates.psPortfolioId !== undefined) proj.psPortfolioId = String(updates.psPortfolioId).trim() || undefined;
+  if (updates.psProjectId !== undefined) proj.psProjectId = String(updates.psProjectId).trim() || undefined;
+  if (Array.isArray(updates.workingDays)) proj.workingDays = updates.workingDays;
+  if (Array.isArray(updates.keywords)) proj.keywords = updates.keywords;
+
+  saveStore(store, filePath);
+  return proj;
+}
+
 export function updateProjectWorkingDays(
   projectId: string,
   workingDays: number[],

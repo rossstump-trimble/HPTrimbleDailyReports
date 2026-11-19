@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getProjectById, updateProjectWorkingDays, updateProjectTradePartners, deleteProject, getCapacityStatus } from '@/lib/store';
+import { getProjectById, updateProject, updateProjectWorkingDays, updateProjectTradePartners, deleteProject, getCapacityStatus } from '@/lib/store';
 import { getRequestAuthContext, requireAuthResponse, requireAdminResponse } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
@@ -45,7 +45,12 @@ export async function PATCH(req: Request, { params }: { params: { projectId: str
 
   try {
     const body = (await req.json()) as {
+      name?: string;
+      code?: string;
+      psPortfolioId?: string;
+      psProjectId?: string;
       workingDays?: number[];
+      keywords?: string[];
       tradePartners?: Array<{ id: string; name: string; contactEmail?: string; category?: string }>;
     };
 
@@ -54,15 +59,20 @@ export async function PATCH(req: Request, { params }: { params: { projectId: str
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    if (body.workingDays && Array.isArray(body.workingDays)) {
-      updated = updateProjectWorkingDays(params.projectId, body.workingDays) ?? updated;
-    }
+    updated = updateProject(params.projectId, {
+      name: body.name,
+      code: body.code,
+      psPortfolioId: body.psPortfolioId,
+      psProjectId: body.psProjectId,
+      workingDays: body.workingDays,
+      keywords: body.keywords,
+    }) ?? updated;
 
     if (body.tradePartners && Array.isArray(body.tradePartners)) {
       updated = updateProjectTradePartners(params.projectId, body.tradePartners) ?? updated;
     }
 
-    return NextResponse.json({ project: updated });
+    return NextResponse.json({ success: true, project: updated });
   } catch (err) {
     console.error('[api/projects/[projectId]] PATCH failed', err);
     return NextResponse.json({ error: 'Failed to update project' }, { status: 500 });
