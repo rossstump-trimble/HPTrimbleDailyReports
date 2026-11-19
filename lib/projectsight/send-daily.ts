@@ -56,25 +56,23 @@ export async function sendFog617ToProjectSight(
     console.warn('[sendFog617ToProjectSight] weather fetch fallback', wErr);
   }
 
-  // Auto-resolve ProjectSight LocationID if not explicitly set
+  // Auto-resolve ProjectSight LocationID if not explicitly set and active project locations are available
   if (args.capture.psLocationId == null && args.capture.locationDescription) {
     try {
       const locations = await listProjectLocations(args.token, args.portfolioId, args.projectId);
-      const text = args.capture.locationDescription.toLowerCase();
-      // Match longest location name first (or tokens separated by '>')
-      const sorted = [...locations].sort((a, b) => b.name.length - a.name.length);
-      const match = sorted.find((loc) => {
-        if (!loc.name) return false;
-        const fullLower = loc.name.toLowerCase();
-        if (text.includes(fullLower)) return true;
-        // Check hierarchy segments, e.g. "Building A Interior > Level 1" -> check "Level 1"
-        const segments = fullLower.split('>').map((s) => s.trim()).filter((s) => s.length >= 3);
-        return segments.some((seg) => text.includes(seg));
-      });
-      if (match?.id) {
-        const numId = Number(match.id);
-        if (Number.isFinite(numId)) {
-          args.capture.psLocationId = numId;
+      if (locations.length > 0) {
+        const text = args.capture.locationDescription.toLowerCase();
+        // Match only verified complete location names from the active project location hierarchy
+        const sorted = [...locations].sort((a, b) => b.name.length - a.name.length);
+        const match = sorted.find((loc) => {
+          if (!loc.name || loc.name.length < 3) return false;
+          return text.includes(loc.name.toLowerCase());
+        });
+        if (match?.id) {
+          const numId = Number(match.id);
+          if (Number.isFinite(numId)) {
+            args.capture.psLocationId = numId;
+          }
         }
       }
     } catch {
@@ -82,12 +80,43 @@ export async function sendFog617ToProjectSight(
     }
   }
 
-  const created = await deps.createDailyReport(
-    args.token,
-    args.portfolioId,
-    args.projectId,
-    mapFog617ToProjectSightBody(args.capture, weather),
-  );
+  let created;
+  try {
+    created = await deps.createDailyReport(
+      args.token,
+      args.portfolioId,
+      args.projectId,
+      mapFog617ToProjectSightBody(args.capture, weather),
+    );
+  } catch (err) {
+    const errorText = err instanceof Error ? err.message : String(err);
+    if (
+      /location/i.test(errorText) ||
+      /99986/.test(errorText) ||
+      /crew/i.test(errorText) ||
+      /deleted|invalid/i.test(errorText)
+    ) {
+      console.warn(
+        '[sendFog617ToProjectSight] create failed with location/crew validation error, retrying without location/crew IDs:',
+        errorText,
+      );
+      const safeCapture: Fog617Capture = {
+        ...args.capture,
+        psLocationId: undefined,
+        locationId: undefined,
+        psCrewId: undefined,
+        crewName: undefined,
+      };
+      created = await deps.createDailyReport(
+        args.token,
+        args.portfolioId,
+        args.projectId,
+        mapFog617ToProjectSightBody(safeCapture, weather),
+      );
+    } else {
+      throw err;
+    }
+  }
   const dailyId = created.id;
   const filesToAttach: SendDailyAttachment[] =
     args.files && args.files.length > 0

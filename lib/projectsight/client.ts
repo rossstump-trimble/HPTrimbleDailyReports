@@ -175,8 +175,16 @@ export async function listProjectLocations(
   const safePort = safePsPathSegment(portfolioId);
   const safeProj = safePsPathSegment(projectId);
 
-  // 1. Try dedicated ProjectSight location endpoints
-  for (const subpath of ['locations', 'Locations', 'lookups/locations']) {
+  // Dedicated ProjectSight location endpoints (only active, current project locations)
+  for (const subpath of [
+    'locations',
+    'Locations',
+    'lookups/locations',
+    'Lookups/Locations',
+    'ProjectLocations',
+    'projectlocations',
+    'LocationTree',
+  ]) {
     try {
       const payload = await psFetch(
         `${projectSightBaseUrl()}/${safePort}/${safeProj}/${subpath}`,
@@ -199,30 +207,7 @@ export async function listProjectLocations(
     }
   }
 
-  // 2. Discover known LocationID and Location names directly from existing ProjectSight daily reports
-  try {
-    const rawReports = await listDailyReports(accessToken, portfolioId, projectId);
-    const locationMap = new Map<string, ProjectSightRef>();
-    for (const r of rawReports) {
-      const works = Array.isArray(r.DailyWorks) ? (r.DailyWorks as Record<string, unknown>[]) : [];
-      for (const w of works) {
-        const lid = caseGet(w, ['LocationID', 'LocationId']);
-        const lName = String(caseGet(w, ['Location', 'LocationDescription']) || '').trim();
-        if (lid != null && lName) {
-          const numId = String(lid);
-          if (!locationMap.has(lName.toLowerCase())) {
-            locationMap.set(lName.toLowerCase(), { id: numId, name: lName });
-          }
-        }
-      }
-    }
-    if (locationMap.size > 0) {
-      return Array.from(locationMap.values());
-    }
-  } catch {
-    // Ignore fallback failure
-  }
-
+  // Never harvest location IDs from historical daily reports as those locations may be deleted or inactive
   return [];
 }
 
@@ -590,6 +575,49 @@ export async function updatePunchItem(
   return { id, payload };
 }
 
+function stripLocationAndCrewIds(
+  body: Record<string, unknown>,
+  opts: { stripLocation: boolean; stripCrew: boolean },
+): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = { ...body };
+  if (opts.stripLocation) {
+    delete cleaned.LocationID;
+    delete cleaned.LocationId;
+  }
+  if (opts.stripCrew) {
+    delete cleaned.CrewID;
+    delete cleaned.CrewId;
+    delete cleaned.Crew;
+    delete cleaned.CrewName;
+  }
+
+  const cleanArray = (arr: unknown): unknown => {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map((item) => {
+      if (!item || typeof item !== 'object') return item;
+      const copy = { ...(item as Record<string, unknown>) };
+      if (opts.stripLocation) {
+        delete copy.LocationID;
+        delete copy.LocationId;
+      }
+      if (opts.stripCrew) {
+        delete copy.CrewID;
+        delete copy.CrewId;
+        delete copy.Crew;
+        delete copy.CrewName;
+      }
+      return copy;
+    });
+  };
+
+  if (cleaned.DailyWorks) cleaned.DailyWorks = cleanArray(cleaned.DailyWorks);
+  if (cleaned.Works) cleaned.Works = cleanArray(cleaned.Works);
+  if (cleaned.DailyLabor) cleaned.DailyLabor = cleanArray(cleaned.DailyLabor);
+  if (cleaned.Labor) cleaned.Labor = cleanArray(cleaned.Labor);
+
+  return cleaned;
+}
+
 export async function createDailyReport(
   accessToken: string,
   portfolioId: string,
@@ -628,14 +656,62 @@ export async function createDailyReport(
       )
       .join('\n').length,
   });
-  const payload = await psFetch(
-    `${projectSightBaseUrl()}/${safePort}/${safeProj}/dailyreports`,
-    {
+
+  const url = `${projectSightBaseUrl()}/${safePort}/${safeProj}/dailyreports`;
+  const headers = projectSightHeaders(accessToken);
+
+  let payload: unknown;
+  try {
+    payload = await psFetch(url, {
       method: 'POST',
-      headers: projectSightHeaders(accessToken),
+      headers,
       body: JSON.stringify(createPayload),
-    },
-  );
+    });
+  } catch (err) {
+    const errorText = err instanceof Error ? err.message : String(err);
+    const isLocationError =
+      /location/i.test(errorText) || /99986/.test(errorText) || /deleted|invalid/i.test(errorText);
+    const isCrewError = /crew/i.test(errorText);
+
+    if (isLocationError || isCrewError) {
+      console.warn(
+        '[projectsight] createDailyReport failed validation, retrying without invalid location/crew fields:',
+        errorText,
+      );
+      // Attempt 1: strip invalid location (and crew if mentioned)
+      const sanitizedPayload = stripLocationAndCrewIds(createPayload, {
+        stripLocation: true,
+        stripCrew: isCrewError,
+      });
+
+      try {
+        payload = await psFetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(sanitizedPayload),
+        });
+      } catch (secondErr) {
+        const secondText = secondErr instanceof Error ? secondErr.message : String(secondErr);
+        // Attempt 2: strip BOTH location and crew completely to guarantee creation
+        console.warn(
+          '[projectsight] second retry stripping both location and crew completely:',
+          secondText,
+        );
+        const fallbackPayload = stripLocationAndCrewIds(createPayload, {
+          stripLocation: true,
+          stripCrew: true,
+        });
+        payload = await psFetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(fallbackPayload),
+        });
+      }
+    } else {
+      throw err;
+    }
+  }
+
   console.error('[projectsight] create daily response', summarizeDailyRecord(payload));
   const id = extractCreatedDailyId(payload);
   if (!id) {

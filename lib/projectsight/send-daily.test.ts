@@ -47,6 +47,37 @@ describe('sendFog617ToProjectSight', () => {
     expect(attachDailyReportFile).toHaveBeenCalled();
   });
 
+  it('retries createDailyReport without location when ProjectSight location is invalid or deleted', async () => {
+    const createDailyReport = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ProjectSightHttpError(
+          400,
+          'Location 374 for Labor Wildcat Flooring: N/A is invalid or has been deleted.',
+        ),
+      )
+      .mockResolvedValueOnce({ id: 'dr-retry-ok' });
+    const attachDailyReportFile = vi.fn().mockResolvedValue(undefined);
+
+    const result = await sendFog617ToProjectSight(
+      {
+        ...args,
+        capture: {
+          ...capture,
+          psLocationId: 374,
+          locationDescription: 'Level 3 concrete finish',
+        },
+      },
+      { createDailyReport, attachDailyReportFile },
+    );
+
+    expect(result.projectSightDailyId).toBe('dr-retry-ok');
+    expect(createDailyReport).toHaveBeenCalledTimes(2);
+    // Second call must have stripped psLocationId
+    const secondCallCapture = createDailyReport.mock.calls[1][3];
+    expect(secondCallCapture.LocationID).toBeUndefined();
+  });
+
   it('does not attach when create fails', async () => {
     const createDailyReport = vi.fn().mockRejectedValue(new ProjectSightHttpError(500, 'nope'));
     const attachDailyReportFile = vi.fn();

@@ -63,6 +63,51 @@ describe('client HTTP', () => {
     expect(urls.some((url) => url.includes('/pf/pr/dailyreports/dr-1/attachments'))).toBe(true);
   });
 
+  it('automatically retries createDailyReport without invalid location/crew when ProjectSight rejects with Code 99986', async () => {
+    // First call rejects with ProjectSight location error
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({
+          Message: 'Location 374 for Labor Wildcat Flooring: N/A is invalid or has been deleted.',
+          Code: 99986,
+        }),
+    });
+    // Second call (sanitized retry) succeeds
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ DailyReportId: 'dr-retry-success' }),
+    });
+
+    const bodyWithInvalidLocation = {
+      Date: '2026-11-19',
+      LocationID: 374,
+      Location: 'Building A Interior > Level 3',
+      DailyWorks: [
+        {
+          CompanyName: 'Wildcat Flooring',
+          Workers: 2,
+          TotalWork: 16,
+          LocationID: 374,
+          Location: 'Building A Interior > Level 3',
+        },
+      ],
+    };
+
+    const created = await createDailyReport('tok', 'pf', 'pr', bodyWithInvalidLocation);
+    expect(created.id).toBe('dr-retry-success');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Verify retry payload stripped the invalid LocationID but preserved the text description
+    const retryCall = fetchMock.mock.calls[1];
+    const retryBody = JSON.parse(String(retryCall[1]?.body));
+    expect(retryBody.LocationID).toBeUndefined();
+    expect(retryBody.DailyWorks[0].LocationID).toBeUndefined();
+    expect(retryBody.DailyWorks[0].Location).toBe('Building A Interior > Level 3');
+  });
+
   it('throws ProjectSightHttpError on 403', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 403, text: async () => 'nope' });
     await expect(listPortfolios('tok')).rejects.toMatchObject({ status: 403 });
