@@ -37,3 +37,4 @@ tables/users_rows.sql
 tables/file_permissions_rows.csv
 tables/file_permissions_rows.sql
 tables/file_permissions_rows (1).sql
+data/ui-translations.json

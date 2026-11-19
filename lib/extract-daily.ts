@@ -3,6 +3,7 @@ import { isAudioMedia } from '@/lib/audio-mime';
 import { geminiGenerate, GEMINI_TEXT_MODEL, type GeminiPart } from '@/lib/gemini-client';
 import { type ExtractedDaily, type SourcePageText } from '@/lib/extract-response';
 import { transcribeAudioFromBuffer } from '@/lib/transcribe-audio';
+import { getIntakeLanguage } from '@/lib/intake-languages';
 
 export type { ExtractedDaily } from '@/lib/extract-response';
 
@@ -62,6 +63,17 @@ Return a JSON object with ONLY these fields (omit fields you cannot find or are 
 }
 
 Return ONLY the JSON object. No markdown fences, no explanation.`;
+
+// The foreman reviews the extracted form in their own language; translation to English happens once, at submit.
+function languageParts(language?: string): GeminiPart[] {
+  if (!language) return [];
+  const { name } = getIntakeLanguage(language);
+  return [
+    {
+      text: `The source is in ${name}. Keep every free-text value (locationDescription, notes, tradesAndFavors, tierSubsSummary, craft, trade, equipment items, ocrPages) in ${name} exactly as spoken or written. Do NOT translate it to English. Keep JSON keys, dates (YYYY-MM-DD), numbers and true/false values as specified above.`,
+    },
+  ];
+}
 
 export function parseGeminiDailyJson(text: string): ExtractedDaily {
   const cleaned = text
@@ -248,11 +260,16 @@ function extractFromXlsx(buffer: Buffer): ExtractedDaily {
 
 // ─── Gemini vision / PDF extraction ──────────────────────────────────────────
 
-async function extractWithGemini(buffer: Buffer, mimeType: string): Promise<ExtractedDaily> {
+async function extractWithGemini(
+  buffer: Buffer,
+  mimeType: string,
+  language?: string,
+): Promise<ExtractedDaily> {
   const result = await geminiGenerate({
     model: GEMINI_TEXT_MODEL,
     parts: [
       { text: EXTRACTION_PROMPT },
+      ...languageParts(language),
       { inlineData: { data: buffer.toString('base64'), mimeType } },
     ],
   });
@@ -262,9 +279,11 @@ async function extractWithGemini(buffer: Buffer, mimeType: string): Promise<Extr
 
 async function extractWithGeminiMultiple(
   files: { buffer: Buffer; mimeType: string; filename: string }[],
+  language?: string,
 ): Promise<ExtractedDaily> {
   const parts: GeminiPart[] = [
     { text: EXTRACTION_PROMPT },
+    ...languageParts(language),
   ];
 
   files.forEach((f, idx) => {
@@ -319,6 +338,7 @@ function mergeTranscriptNotes(extracted: ExtractedDaily, transcript: string): Ex
 export async function extractDailyFromTranscript(
   transcript: string,
   requestId?: string,
+  language?: string,
 ): Promise<ExtractedDaily> {
   const trimmed = transcript.trim();
   if (!trimmed) return {};
@@ -328,6 +348,7 @@ export async function extractDailyFromTranscript(
     requestId,
     parts: [
       { text: SPOKEN_EXTRACTION_PROMPT },
+      ...languageParts(language),
       { text: `TRANSCRIPT:\n"""\n${trimmed}\n"""` },
     ],
   });
@@ -346,10 +367,11 @@ export interface ExtractInputFile {
 export async function extractDailyFromMultipleFiles(
   files: ExtractInputFile[],
   projectKeywords: string[] = [],
+  language?: string,
 ): Promise<ExtractedDaily> {
   if (!files || files.length === 0) return {};
   if (files.length === 1) {
-    return extractDailyFromBuffer(files[0].buffer, files[0].mimeType, files[0].filename, projectKeywords);
+    return extractDailyFromBuffer(files[0].buffer, files[0].mimeType, files[0].filename, projectKeywords, language);
   }
 
   const audioFiles = files.filter((f) => isAudioMedia(f.mimeType, f.filename));
@@ -373,9 +395,10 @@ export async function extractDailyFromMultipleFiles(
         imageDocFiles[0].mimeType,
         imageDocFiles[0].filename,
         projectKeywords,
+        language,
       );
     } else if (imageDocFiles.length > 1) {
-      combined = await extractWithGeminiMultiple(imageDocFiles);
+      combined = await extractWithGeminiMultiple(imageDocFiles, language);
     }
 
     for (const xf of xlsxFiles) {
@@ -388,9 +411,9 @@ export async function extractDailyFromMultipleFiles(
 
   for (const af of audioFiles) {
     try {
-      const tr = await transcribeAudioFromBuffer(af.buffer, af.mimeType, af.filename, undefined, projectKeywords);
+      const tr = await transcribeAudioFromBuffer(af.buffer, af.mimeType, af.filename, undefined, projectKeywords, language);
       if (tr) {
-        const aExtracted = await extractDailyFromTranscript(tr);
+        const aExtracted = await extractDailyFromTranscript(tr, undefined, language);
         combined = {
           ...combined,
           ...aExtracted,
@@ -408,10 +431,11 @@ export async function extractDailyFromBuffer(
   mimeType: string,
   filename: string,
   projectKeywords: string[] = [],
+  language?: string,
 ): Promise<ExtractedDaily> {
   if (isAudioMedia(mimeType, filename)) {
-    const transcript = await transcribeAudioFromBuffer(buffer, mimeType, filename, undefined, projectKeywords);
-    return extractDailyFromTranscript(transcript);
+    const transcript = await transcribeAudioFromBuffer(buffer, mimeType, filename, undefined, projectKeywords, language);
+    return extractDailyFromTranscript(transcript, undefined, language);
   }
 
   const lower = filename.toLowerCase();
@@ -429,5 +453,5 @@ export async function extractDailyFromBuffer(
     }
   }
 
-  return extractWithGemini(buffer, mimeType);
+  return extractWithGemini(buffer, mimeType, language);
 }

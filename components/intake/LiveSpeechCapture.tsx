@@ -15,6 +15,7 @@ import {
   getSpeechRecognitionCtor,
   transcriptFromSpeechEvent,
 } from "@/lib/browser-speech";
+import { useIntakeLanguage } from "@/components/intake/IntakeLanguageProvider";
 import { micPermissionDialogCopy } from "@/lib/mic-permission";
 import { errorMessage, voiceLog } from "@/lib/voice-log";
 
@@ -33,6 +34,7 @@ export default function LiveSpeechCapture({
   onFinalText,
   onFallback,
 }: LiveSpeechCaptureProps) {
+  const { speechLang } = useIntakeLanguage();
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<"denied" | "no-speech" | "unsupported" | "unknown" | null>(
@@ -73,7 +75,7 @@ export default function LiveSpeechCapture({
     interimRef.current = "";
     submittedRef.current = false;
     const recognition = new Ctor();
-    recognition.lang = "en-US";
+    recognition.lang = speechLang;
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
@@ -129,7 +131,7 @@ export default function LiveSpeechCapture({
       });
       setError("unknown");
     }
-  }, []);
+  }, [speechLang]);
 
   const toggle = () => {
     if (listening) stop();

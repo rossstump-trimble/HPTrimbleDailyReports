@@ -19,6 +19,8 @@ import { getRequestAuthContext } from '@/lib/api-auth';
 import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import { sendFog617ToProjectSight } from '@/lib/projectsight/send-daily';
 import { captureFromDailyReport } from '@/lib/projectsight/send-intake-daily';
+import { nonEnglishLanguageOrUndefined } from '@/lib/intake-languages';
+import { applyEnglishTranslation } from '@/lib/translate';
 
 export const runtime = 'nodejs';
 
@@ -292,7 +294,7 @@ export async function POST(req: Request) {
       ? 0
       : Math.max(0, Math.min(100000, Number(body.totalHours) || 0));
 
-    const report: DailyReport = {
+    let report: DailyReport = {
       id,
       projectId,
       tradePartnerId,
@@ -318,6 +320,19 @@ export async function POST(req: Request) {
       rawSourceFiles: rawSourceFiles.length > 0 ? rawSourceFiles : undefined,
       approvalStatus: isHp ? 'approved' : (existingReport?.approvalStatus || 'pending'),
     };
+
+    const spokenLanguage = nonEnglishLanguageOrUndefined((body as Record<string, unknown>).language);
+    if (existingReport?.originalLanguage) {
+      // Staff editing an already-translated report must not lose the foreman's original wording.
+      report = {
+        ...report,
+        originalLanguage: existingReport.originalLanguage,
+        originalText: existingReport.originalText,
+        translationStatus: existingReport.translationStatus,
+      };
+    } else if (spokenLanguage && !isHp) {
+      report = await applyEnglishTranslation(report, spokenLanguage, targetProject.keywords ?? []);
+    }
 
     try {
       const fileAttachments: IngestedFileAttachment[] = [];

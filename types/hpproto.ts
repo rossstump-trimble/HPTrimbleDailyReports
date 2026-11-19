@@ -85,6 +85,17 @@ export interface DailyReportAttachment {
   category?: 'daily_capture' | 'sta_form';
 }
 
+/** The foreman's untranslated wording, kept verbatim when a report is translated to English. */
+export interface OriginalReportText {
+  locationDescription: string;
+  notes: string;
+  tradesAndFavors: string;
+  tierSubsSummary: string;
+  equipment: string[];
+  crewCrafts: string[];
+  tierTrades: string[];
+}
+
 export interface DailyReport {
   id: string;
   projectId: string;
@@ -120,6 +131,11 @@ export interface DailyReport {
   projectSightPortfolioId?: string;
   projectSightProjectId?: string;
   sentToProjectSightAt?: string;
+  /** Set when the foreman submitted in another language; the fields above are then the English translation. */
+  originalLanguage?: string;
+  originalText?: OriginalReportText;
+  /** 'failed' means the fields above are still in the original language. */
+  translationStatus?: 'translated' | 'failed';
 }
 
 export interface BowlingCell {

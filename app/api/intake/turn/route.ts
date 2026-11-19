@@ -11,6 +11,7 @@ import type { ExtractedDaily } from '@/lib/extract-response';
 import { transcribeAudioFromBuffer } from '@/lib/transcribe-audio';
 import { errorMessage, newVoiceRequestId, previewText, voiceLog } from '@/lib/voice-log';
 import { getProjectById } from '@/lib/store';
+import { nonEnglishLanguageOrUndefined } from '@/lib/intake-languages';
 
 export const runtime = 'nodejs';
 
@@ -58,6 +59,7 @@ export async function POST(req: Request) {
     const audience = formData.get('audience') === 'hp' ? ('hp' as const) : ('trade' as const);
     const projectIdRaw = String(formData.get('projectId') || '').trim();
     const projectKeywords = projectIdRaw ? (getProjectById(projectIdRaw)?.keywords || []) : [];
+    const language = nonEnglishLanguageOrUndefined(formData.get('language'));
     const file = formData.get('file');
     const hadFile = file instanceof File;
     voiceLog('turn-route', 'info', 'turn request', {
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
         );
       }
       const buffer = Buffer.from(await file.arrayBuffer());
-      transcript = await transcribeAudioFromBuffer(buffer, file.type, file.name, requestId, projectKeywords);
+      transcript = await transcribeAudioFromBuffer(buffer, file.type, file.name, requestId, projectKeywords, language);
       if (!transcript) {
         voiceLog('turn-route', 'error', 'transcription empty', {
           requestId,
@@ -95,7 +97,7 @@ export async function POST(req: Request) {
         );
       }
       extracted = stripTranscriptOnlyNotes(
-        await extractDailyFromTranscript(transcript, requestId),
+        await extractDailyFromTranscript(transcript, requestId, language),
         transcript,
       );
       voiceLog('turn-route', 'info', 'extracted fields', {
@@ -107,7 +109,7 @@ export async function POST(req: Request) {
     } else if (!skip && typedTranscript) {
       transcript = typedTranscript;
       extracted = stripTranscriptOnlyNotes(
-        await extractDailyFromTranscript(transcript, requestId),
+        await extractDailyFromTranscript(transcript, requestId, language),
         transcript,
       );
       voiceLog('turn-route', 'info', 'extracted typed transcript', {

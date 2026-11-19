@@ -28,6 +28,11 @@ import VoiceInterview from "@/components/intake/VoiceInterview";
 import FreeformVoiceCapture from "@/components/intake/FreeformVoiceCapture";
 import DailyConfirmCard, { type DailyFormData } from "@/components/intake/DailyConfirmCard";
 import SourceReview from "@/components/intake/SourceReview";
+import {
+  IntakeLanguageProvider,
+  LanguageSelect,
+  useIntakeLanguage,
+} from "@/components/intake/IntakeLanguageProvider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +50,7 @@ import {
 import { primeSpeech } from "@/lib/speak";
 import type { TradePartner } from "@/types/hpproto";
 import { resolveTradePartner } from "@/lib/trade-partner";
+import { nonEnglishLanguageOrUndefined } from "@/lib/intake-languages";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -138,12 +144,13 @@ function TrimbleHeader({
           style={{ mixBlendMode: "screen" }}
         />
         <span className="text-white/40 text-sm font-light">|</span>
-        <span className="text-white text-sm font-semibold truncate">
+        <span translate="no" className="text-white text-sm font-semibold truncate">
           {projectName || "Daily Intake"}
         </span>
       </div>
 
       <div className="flex-1" />
+      <LanguageSelect />
     </header>
   );
 }
@@ -225,7 +232,7 @@ function SpokenTranscriptCard({ transcript }: { transcript: string }) {
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
         <h3 className="text-sm font-bold text-blue-700 dark:text-blue-400">What we heard</h3>
       </div>
-      <p className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{transcript}</p>
+      <p translate="no" className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{transcript}</p>
     </div>
   );
 }
@@ -282,8 +289,17 @@ function SuccessCard({
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function IntakePage() {
+  return (
+    <IntakeLanguageProvider className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-foreground">
+      <IntakePageBody />
+    </IntakeLanguageProvider>
+  );
+}
+
+function IntakePageBody() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId ?? "";
+  const { language } = useIntakeLanguage();
 
   const [projectName, setProjectName] = useState<string>("Hensel Phelps Demo Project");
   const [projectCode, setProjectCode] = useState<string>("");
@@ -368,6 +384,8 @@ export default function IntakePage() {
         if (projectId) {
           body.append("projectId", projectId);
         }
+        const spokenLanguage = nonEnglishLanguageOrUndefined(language);
+        if (spokenLanguage) body.append("language", spokenLanguage);
 
         const res = await fetch("/api/intake/extract", {
           method: "POST",
@@ -392,7 +410,7 @@ export default function IntakePage() {
         setStep("sta");
       }
     },
-    [formData.tradePartnerName, tradePartners],
+    [formData.tradePartnerName, tradePartners, projectId, language],
   );
 
   const handleFileDrop = useCallback(
@@ -457,6 +475,8 @@ export default function IntakePage() {
         if (projectId) {
           body.append("projectId", projectId);
         }
+        const spokenLanguage = nonEnglishLanguageOrUndefined(language);
+        if (spokenLanguage) body.append("language", spokenLanguage);
 
         const res = await fetch("/api/intake/extract", {
           method: "POST",
@@ -490,7 +510,7 @@ export default function IntakePage() {
         setStep("sta");
       }
     },
-    [formData.tradePartnerName, tradePartners],
+    [formData.tradePartnerName, tradePartners, projectId, language],
   );
 
   // ── Submit Daily Report (Queues for review) ──────────────────────────────────
@@ -509,6 +529,7 @@ export default function IntakePage() {
         JSON.stringify({
           projectId,
           intakeToken,
+          language: nonEnglishLanguageOrUndefined(language),
           ...formData,
           staCompleted: formData.staCompleted || staFiles.length > 0,
         }),
@@ -539,7 +560,7 @@ export default function IntakePage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [projectId, formData, sourceFiles, sourceFile, staFiles]);
+  }, [projectId, formData, sourceFiles, sourceFile, staFiles, language]);
 
   // ── Reset ────────────────────────────────────────────────────────────────
 
@@ -591,7 +612,7 @@ export default function IntakePage() {
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-foreground">
+    <>
       <TrimbleHeader projectId={projectId} projectName={projectName} tidReady={tidReady} />
 
       {/* Step indicator */}
@@ -638,7 +659,7 @@ export default function IntakePage() {
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold block">
                   Project
                 </span>
-                <span className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate block">
+                <span translate="no" className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate block">
                   {projectName}
                 </span>
               </div>
@@ -1032,6 +1053,6 @@ export default function IntakePage() {
           </div>
         )}
       </main>
-    </div>
+    </>
   );
 }

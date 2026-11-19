@@ -43,6 +43,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { DailyReport, ProjectCompany, CompanyContact } from "@/types/hpproto";
 import { AddContactModal } from "@/components/review/AddContactModal";
+import OriginalTextPanel from "@/components/review/OriginalTextPanel";
 
 interface ReviewResponse {
   projectId: string;
@@ -624,6 +625,8 @@ export default function ReviewQueuePage() {
                         )}
                       </div>
                     )}
+
+                    <OriginalTextPanel report={report} />
                   </CardContent>
                 </Card>
               );
@@ -779,6 +782,8 @@ export default function ReviewQueuePage() {
                   className="text-xs"
                 />
               </div>
+
+              <OriginalTextPanel report={selectedReport} />
 
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">Location &amp; Work Performed</Label>

@@ -2,6 +2,7 @@ import Groq, { toFile as groqToFile } from 'groq-sdk';
 import OpenAI, { toFile as openaiToFile } from 'openai';
 import { audioUploadFilename, normalizeAudioMime } from '@/lib/audio-mime';
 import { geminiGenerate, GEMINI_TEXT_MODEL } from '@/lib/gemini-client';
+import { getIntakeLanguage } from '@/lib/intake-languages';
 import { errorMessage, previewText, voiceLog } from '@/lib/voice-log';
 
 const BASE_WHISPER_PROMPT =
@@ -131,11 +132,15 @@ async function transcribeWithGemini(
   mimeType: string,
   requestId?: string,
   keywordsPrompt = '',
+  language?: string,
 ): Promise<string> {
   const started = Date.now();
-  const promptText = keywordsPrompt
-    ? `${BASE_GEMINI_TRANSCRIBE_PROMPT} Ensure accurate transcription of industry & project nomenclature: ${keywordsPrompt}. Note: 'colo' refers to data center colocation space, not 'color'. Return only the transcript text.`
+  const basePrompt = language
+    ? `${BASE_GEMINI_TRANSCRIBE_PROMPT} The speaker is speaking ${getIntakeLanguage(language).name}; transcribe it in that language and do not translate it to English.`
     : BASE_GEMINI_TRANSCRIBE_PROMPT;
+  const promptText = keywordsPrompt
+    ? `${basePrompt} Ensure accurate transcription of industry & project nomenclature: ${keywordsPrompt}. Note: 'colo' refers to data center colocation space, not 'color'. Return only the transcript text.`
+    : basePrompt;
 
   const result = await geminiGenerate({
     model: GEMINI_TEXT_MODEL,
@@ -166,6 +171,7 @@ export async function transcribeAudioFromBuffer(
   filename = '',
   requestId?: string,
   projectKeywords: string[] = [],
+  language?: string,
 ): Promise<string> {
   const normalizedMime = normalizeAudioMime(mimeType);
   const uploadName = audioUploadFilename(normalizedMime, filename);
@@ -186,11 +192,12 @@ export async function transcribeAudioFromBuffer(
   const providers: Array<{ name: string; run: () => Promise<string> }> = [
     { name: 'groq', run: () => transcribeWithGroq(buffer, normalizedMime, uploadName, requestId, keywordsPrompt) },
     { name: 'openai', run: () => transcribeWithOpenAI(buffer, normalizedMime, uploadName, requestId, keywordsPrompt) },
-    { name: 'gemini', run: () => transcribeWithGemini(buffer, normalizedMime, requestId, keywordsPrompt) },
+    { name: 'gemini', run: () => transcribeWithGemini(buffer, normalizedMime, requestId, keywordsPrompt, language) },
   ];
 
     for (const provider of providers) {
-      if ((provider.name === 'groq' || provider.name === 'openai') && process.env.ALLOW_PUBLIC_STT_FALLBACK !== 'true') {
+      // The Whisper calls above are pinned to English, so they are only valid for English audio.
+      if ((provider.name === 'groq' || provider.name === 'openai') && (process.env.ALLOW_PUBLIC_STT_FALLBACK !== 'true' || language)) {
         continue;
       }
       try {

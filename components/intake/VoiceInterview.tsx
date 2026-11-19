@@ -6,6 +6,7 @@ import InterviewFormPreview from "@/components/intake/InterviewFormPreview";
 import LiveSpeechCapture from "@/components/intake/LiveSpeechCapture";
 import VoiceRecorder from "@/components/intake/VoiceRecorder";
 import { Textarea } from "@/components/ui/textarea";
+import { useIntakeLanguage } from "@/components/intake/IntakeLanguageProvider";
 import { browserSpeechSupported } from "@/lib/browser-speech";
 import {
   adjacentQuestion,
@@ -19,6 +20,7 @@ import {
   type InterviewMode,
 } from "@/lib/fog617-interview";
 import type { ExtractedDaily } from "@/lib/extract-response";
+import { nonEnglishLanguageOrUndefined } from "@/lib/intake-languages";
 import { primeSpeech, speak, stopSpeaking } from "@/lib/speak";
 import { errorMessage, newVoiceRequestId, voiceLog } from "@/lib/voice-log";
 
@@ -65,6 +67,7 @@ export default function VoiceInterview({
   audience = "trade",
   projectId,
 }: VoiceInterviewProps) {
+  const { language, translateText } = useIntakeLanguage();
   const opening = openingQuestion(mode, audience);
   const [draft, setDraft] = useState<ExtractedDaily>(seedDraft);
   const [answered, setAnswered] = useState<Fog617SlotId[]>([]);
@@ -86,9 +89,16 @@ export default function VoiceInterview({
     setSttEngine(supported ? "phone" : "gemini");
   }, []);
 
+  // The questions come from the server in English; they are translated here so they are read aloud in the foreman's language.
   useEffect(() => {
-    void speak(prompt);
-  }, [prompt]);
+    let cancelled = false;
+    void translateText(prompt).then((spoken) => {
+      if (!cancelled) void speak(spoken);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [prompt, language, translateText]);
 
   const answersRef = useRef(answers);
   answersRef.current = answers;
@@ -99,8 +109,8 @@ export default function VoiceInterview({
 
   const hearAgain = useCallback(() => {
     primeSpeech();
-    void speak(prompt);
-  }, [prompt]);
+    void translateText(prompt).then((spoken) => speak(spoken));
+  }, [prompt, translateText]);
 
   const persistEditor = useCallback((text: string, currentSlotId: Fog617SlotId | null) => {
     const key = answerKeyForSlot(currentSlotId);
@@ -145,6 +155,8 @@ export default function VoiceInterview({
         body.append("mode", mode);
         body.append("audience", audience);
         if (projectId) body.append("projectId", projectId);
+        const spokenLanguage = nonEnglishLanguageOrUndefined(language);
+        if (spokenLanguage) body.append("language", spokenLanguage);
         body.append("skip", skip ? "true" : "false");
         body.append("advance", stay ? "false" : "true");
         body.append("draft", JSON.stringify(draft));
@@ -194,7 +206,7 @@ export default function VoiceInterview({
         setBusy(false);
       }
     },
-    [answered, applyTurn, audience, draft, mode, slotId],
+    [answered, applyTurn, audience, draft, language, mode, slotId],
   );
 
   const savedText = answers[answerKeyForSlot(slotId)] ?? "";

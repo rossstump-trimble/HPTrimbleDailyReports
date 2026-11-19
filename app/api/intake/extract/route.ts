@@ -7,6 +7,7 @@ import {
 import { saveStagingUpload } from '@/lib/upload-store';
 import { errorMessage, previewText, voiceLog } from '@/lib/voice-log';
 import { getProjectById } from '@/lib/store';
+import { nonEnglishLanguageOrUndefined } from '@/lib/intake-languages';
 
 export const runtime = 'nodejs';
 
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
     const companyHint = String(formData.get('company') || '').trim().slice(0, 200);
     const projectIdRaw = String(formData.get('projectId') || '').trim();
     const projectKeywords = projectIdRaw ? (getProjectById(projectIdRaw)?.keywords || []) : [];
+    const language = nonEnglishLanguageOrUndefined(formData.get('language'));
 
     // Deduplicate in case the client submitted both
     const files = Array.from(new Set(rawFiles));
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
     }
 
     if (files.length === 0 && transcriptField) {
-      const extracted = await extractDailyFromTranscript(transcriptField);
+      const extracted = await extractDailyFromTranscript(transcriptField, undefined, language);
       if (companyHint && !extracted.tradePartnerName) {
         extracted.tradePartnerName = companyHint;
       }
@@ -78,7 +80,7 @@ export async function POST(req: Request) {
       fileNames: inputFiles.map((f) => f.filename),
     });
 
-    const extracted = await extractDailyFromMultipleFiles(inputFiles, projectKeywords);
+    const extracted = await extractDailyFromMultipleFiles(inputFiles, projectKeywords, language);
     if (companyHint && !extracted.tradePartnerName) {
       extracted.tradePartnerName = companyHint;
     }
