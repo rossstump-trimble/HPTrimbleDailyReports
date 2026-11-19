@@ -14,7 +14,7 @@ const TRANSLATED_ATTRIBUTES = ['placeholder', 'title', 'aria-label', 'alt'];
 // Typed or entered content must never be rewritten, only the app's own wording.
 const SKIPPED_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'CODE', 'PRE', 'SVG']);
 // Small chunks are requested in parallel: model latency grows with output size, so one big request leaves the page in English far longer.
-const FETCH_BATCH_SIZE = 12;
+const FETCH_BATCH_SIZE = 30;
 const FLUSH_DELAY_MS = 20;
 const RESCAN_DELAY_MS = 30;
 const MAX_TRACKED_SLOTS = 3000;
