@@ -14,7 +14,7 @@ import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallb
 import { AUTH_COOKIE, SESSION_COOKIE } from '@/lib/local-session';
 import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import { slugTradePartnerId } from '@/lib/trade-partner';
-import type { TradePartner, ProjectCompany, CompanyContact } from '@/types/hpproto';
+import type { TradePartner, ProjectCompany, CompanyContact, CompanyCrew } from '@/types/hpproto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
