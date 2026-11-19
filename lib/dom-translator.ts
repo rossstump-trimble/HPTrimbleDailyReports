@@ -13,7 +13,8 @@ export interface DomTranslator {
 const TRANSLATED_ATTRIBUTES = ['placeholder', 'title', 'aria-label', 'alt'];
 // Typed or entered content must never be rewritten, only the app's own wording.
 const SKIPPED_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'CODE', 'PRE', 'SVG']);
-const FETCH_BATCH_SIZE = 100;
+// Small chunks are requested in parallel: model latency grows with output size, so one big request leaves the page in English far longer.
+const FETCH_BATCH_SIZE = 30;
 const FLUSH_DELAY_MS = 20;
 const RESCAN_DELAY_MS = 30;
 const MAX_TRACKED_SLOTS = 3000;
@@ -45,8 +46,8 @@ function isNoTranslate(el: Element | null): boolean {
   return Boolean(el?.closest('[translate="no"]'));
 }
 
-function isSkippedElement(el: Element): boolean {
-  return SKIPPED_TAGS.has(el.tagName.toUpperCase()) || el.getAttribute('translate') === 'no';
+function hasUntranslatableChildren(el: Element): boolean {
+  return SKIPPED_TAGS.has(el.tagName.toUpperCase());
 }
 
 /**
@@ -57,6 +58,7 @@ function isSkippedElement(el: Element): boolean {
 export function createDomTranslator(
   root: HTMLElement,
   fetchTranslations: FetchTranslations,
+  onBusyChange?: (busy: boolean) => void,
 ): DomTranslator {
   let language = 'en';
   const caches = new Map<string, Map<string, string>>();
@@ -68,6 +70,14 @@ export function createDomTranslator(
   const dirty = new Set<Node>();
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let rescanTimer: ReturnType<typeof setTimeout> | null = null;
+  let busy = false;
+
+  const notifyBusy = (): void => {
+    const next = pending.size > 0 || inFlight.size > 0;
+    if (next === busy) return;
+    busy = next;
+    onBusyChange?.(next);
+  };
 
   const cacheFor = (lang: string): Map<string, string> => {
     let cache = caches.get(lang);
@@ -118,10 +128,12 @@ export function createDomTranslator(
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const el = node as Element;
-    if (isSkippedElement(el)) return;
+    if (el.getAttribute('translate') === 'no') return;
     for (const attribute of TRANSLATED_ATTRIBUTES) {
       if (el.hasAttribute(attribute)) out.push(attributeSlot(el, attribute));
     }
+    // A textarea's placeholder is app wording even though what is typed in it is not.
+    if (hasUntranslatableChildren(el)) return;
     for (let i = 0; i < el.childNodes.length; i += 1) {
       collectSlots(el.childNodes[i], out);
     }
@@ -145,29 +157,38 @@ export function createDomTranslator(
     const cache = cacheFor(lang);
     batches.forEach((slots, key) => inFlight.set(key, slots));
 
-    for (let i = 0; i < keys.length; i += FETCH_BATCH_SIZE) {
-      const chunk = keys.slice(i, i + FETCH_BATCH_SIZE);
-      let translations: Record<string, string> = {};
-      try {
-        translations = await fetchTranslations(lang, chunk);
-      } catch {
-        translations = {};
-      }
-      if (lang !== language) return;
+    notifyBusy();
 
-      for (const key of chunk) {
-        const translated = translations[key];
-        inFlight.delete(key);
-        if (typeof translated !== 'string' || !translated) continue;
-        cache.set(key, translated);
-        for (const slot of batches.get(key) ?? []) {
-          const state = getState(slot);
-          if (state && state.applied === null && slot.read() === state.original) {
-            apply(slot, state, translated);
+    const chunks: string[][] = [];
+    for (let i = 0; i < keys.length; i += FETCH_BATCH_SIZE) {
+      chunks.push(keys.slice(i, i + FETCH_BATCH_SIZE));
+    }
+
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        let translations: Record<string, string> = {};
+        try {
+          translations = await fetchTranslations(lang, chunk);
+        } catch {
+          translations = {};
+        }
+        if (lang !== language) return;
+
+        for (const key of chunk) {
+          const translated = translations[key];
+          inFlight.delete(key);
+          if (typeof translated !== 'string' || !translated) continue;
+          cache.set(key, translated);
+          for (const slot of batches.get(key) ?? []) {
+            const state = getState(slot);
+            if (state && state.applied === null && slot.read() === state.original) {
+              apply(slot, state, translated);
+            }
           }
         }
-      }
-    }
+        notifyBusy();
+      }),
+    );
   };
 
   const queue = (key: string, slot: Slot): void => {
@@ -175,6 +196,7 @@ export function createDomTranslator(
     if (existing) existing.push(slot);
     else pending.set(key, [slot]);
     if (!flushTimer) flushTimer = setTimeout(() => void flush(), FLUSH_DELAY_MS);
+    notifyBusy();
   };
 
   const processSlot = (slot: Slot): void => {
@@ -263,6 +285,7 @@ export function createDomTranslator(
       inFlight.clear();
       dirty.clear();
       language = next;
+      notifyBusy();
       if (next === 'en') return;
       requested.delete(next);
       scan(root);

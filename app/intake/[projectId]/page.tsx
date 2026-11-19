@@ -151,6 +151,7 @@ function TrimbleHeader({
 
       <div className="flex-1" />
       <LanguageSelect />
+      <div id="feedback-widget-mount" className="flex items-center" />
     </header>
   );
 }

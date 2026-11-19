@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Globe } from "lucide-react";
+import { Globe, Loader2 } from "lucide-react";
 import { createDomTranslator, type DomTranslator } from "@/lib/dom-translator";
 import {
   DEFAULT_INTAKE_LANGUAGE,
@@ -28,6 +28,8 @@ interface IntakeLanguageContextValue {
   /** Translates wording that is not on screen (e.g. interview questions that are read aloud). */
   translateText: (text: string) => Promise<string>;
   speechLang: string;
+  /** True while wording for the chosen language is still being fetched. */
+  translating: boolean;
 }
 
 const IntakeLanguageContext = createContext<IntakeLanguageContextValue>({
@@ -35,6 +37,7 @@ const IntakeLanguageContext = createContext<IntakeLanguageContextValue>({
   setLanguage: () => undefined,
   translateText: async (text) => text,
   speechLang: getIntakeLanguage(DEFAULT_INTAKE_LANGUAGE).speechLang,
+  translating: false,
 });
 
 export function useIntakeLanguage(): IntakeLanguageContextValue {
@@ -86,13 +89,17 @@ async function fetchUiTranslations(
 }
 
 export function LanguageSelect(): JSX.Element {
-  const { language, setLanguage } = useIntakeLanguage();
+  const { language, setLanguage, translating } = useIntakeLanguage();
   return (
     <label
       translate="no"
       className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition px-2.5 py-1.5 text-xs font-semibold text-white"
     >
-      <Globe size={14} aria-hidden="true" />
+      {translating ? (
+        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+      ) : (
+        <Globe size={14} aria-hidden="true" />
+      )}
       <select
         value={language}
         onChange={(e) => setLanguage(e.target.value)}
@@ -117,13 +124,14 @@ export function IntakeLanguageProvider({
   className?: string;
 }): JSX.Element {
   const [language, setLanguageState] = useState(DEFAULT_INTAKE_LANGUAGE);
+  const [translating, setTranslating] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const translatorRef = useRef<DomTranslator | null>(null);
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return undefined;
-    const translator = createDomTranslator(root, fetchUiTranslations);
+    const translator = createDomTranslator(root, fetchUiTranslations, setTranslating);
     translatorRef.current = translator;
     return () => {
       translator.destroy();
@@ -162,13 +170,19 @@ export function IntakeLanguageProvider({
 
   const config = getIntakeLanguage(language);
   const value = useMemo<IntakeLanguageContextValue>(
-    () => ({ language, setLanguage, translateText, speechLang: config.speechLang }),
-    [language, setLanguage, translateText, config.speechLang],
+    () => ({ language, setLanguage, translateText, speechLang: config.speechLang, translating }),
+    [language, setLanguage, translateText, config.speechLang, translating],
   );
 
   return (
     <IntakeLanguageContext.Provider value={value}>
-      <div ref={rootRef} dir={config.dir} lang={language} className={className}>
+      <div
+        ref={rootRef}
+        dir={config.dir}
+        lang={language}
+        aria-busy={translating}
+        className={className}
+      >
         {children}
       </div>
     </IntakeLanguageContext.Provider>

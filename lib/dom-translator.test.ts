@@ -60,6 +60,47 @@ describe('createDomTranslator', () => {
     expect(root.querySelector('input')?.getAttribute('placeholder')).toBe('O escriba el nombre de la empresa');
   });
 
+  it('translates a textarea placeholder but not what is typed in it', async () => {
+    root.innerHTML = `<textarea placeholder="Or type company name">Form</textarea>`;
+
+    translator.setLanguage('es');
+
+    await vi.waitFor(() => {
+      expect(root.querySelector('textarea')?.getAttribute('placeholder')).toBe(
+        'O escriba el nombre de la empresa',
+      );
+    });
+    expect(root.querySelector('textarea')?.textContent).toBe('Form');
+  });
+
+  it('reports busy while strings are being fetched and idle once applied', async () => {
+    const states: boolean[] = [];
+    translator.destroy();
+    translator = createDomTranslator(root, fetchTranslations, (busy) => states.push(busy));
+    root.innerHTML = `<label>Form</label>`;
+
+    translator.setLanguage('es');
+    await vi.waitFor(() => expect(root.querySelector('label')?.textContent).toBe('Formulario'));
+
+    expect(states).toEqual([true, false]);
+  });
+
+  it('requests large screens in parallel chunks and applies each as it arrives', async () => {
+    const calls: number[] = [];
+    translator.destroy();
+    translator = createDomTranslator(root, async (_language, strings) => {
+      calls.push(strings.length);
+      return Object.fromEntries(strings.map((text) => [text, `${text}!`]));
+    });
+    root.innerHTML = Array.from({ length: 70 }, (_, i) => `<p>Word${String.fromCharCode(97 + (i % 26))}${'x'.repeat(Math.floor(i / 26))}</p>`).join('');
+
+    translator.setLanguage('es');
+    await vi.waitFor(() => expect(root.querySelectorAll('p')[69].textContent?.endsWith('!')).toBe(true));
+
+    expect(calls.reduce((a, b) => a + b, 0)).toBe(70);
+    expect(Math.max(...calls)).toBeLessThanOrEqual(30);
+  });
+
   it('leaves entered content, translate="no" content and identifiers alone', async () => {
     root.innerHTML = `
       <textarea>Form</textarea>
