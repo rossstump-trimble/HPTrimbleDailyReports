@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { extractInspectionSheet } from '@/lib/inspection-ocr';
 import { getInspectionsForProject } from '@/lib/store';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
 export async function POST(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const formData = await req.formData();

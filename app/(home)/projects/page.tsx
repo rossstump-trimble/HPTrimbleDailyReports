@@ -62,6 +62,9 @@ export default function ProjectsPage() {
     isLocked: false,
   });
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [hiddenCount, setHiddenCount] = useState(0);
+  const [showAll, setShowAll] = useState(false);
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
 
@@ -76,12 +79,19 @@ export default function ProjectsPage() {
   const [lastProjectId, setLastProjectIdState] = useState<string | null>(null);
   const [defaultProjectId, setDefaultProjectIdState] = useState<string | null>(null);
 
-  const loadProjects = () => {
-    fetch("/api/projects")
+  const loadProjects = (includeAll = showAll) => {
+    fetch(includeAll ? "/api/projects?scope=all" : "/api/projects")
       .then((res) => res.json())
-      .then((data: { projects?: Project[]; capacity?: { total: number; max: number; isLocked: boolean } }) => {
+      .then((data: {
+        projects?: Project[];
+        capacity?: { total: number; max: number; isLocked: boolean };
+        isAdmin?: boolean;
+        hiddenCount?: number;
+      }) => {
         if (data.projects) setProjects(data.projects);
         if (data.capacity) setCapacity(data.capacity);
+        setIsAdmin(Boolean(data.isAdmin));
+        setHiddenCount(data.hiddenCount ?? 0);
       })
       .catch((err) => console.error("[load projects failed]", err))
       .finally(() => setLoading(false));
@@ -297,6 +307,23 @@ export default function ProjectsPage() {
             </Button>
           </div>
 
+          {isAdmin && (
+            <Button
+              type="button"
+              variant={showAll ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => {
+                setShowAll(!showAll);
+                setPage(1);
+                loadProjects(!showAll);
+              }}
+              className="h-9 text-xs"
+              title="Administrators see only their ProjectSight projects by default"
+            >
+              {showAll ? "Showing all projects" : `Show all projects${hiddenCount > 0 ? ` (+${hiddenCount} hidden)` : ""}`}
+            </Button>
+          )}
+
           <ShowMeTour tourId="projects" />
 
           <Button
@@ -317,7 +344,11 @@ export default function ProjectsPage() {
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-foreground">No projects found</h3>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              {searchQuery ? `No project matches "${searchQuery}". Clear your search or create a new project.` : "Get started by adding your first project."}
+              {searchQuery
+                ? `No project matches "${searchQuery}". Clear your search or create a new project.`
+                : hiddenCount > 0
+                  ? "None of the projects here are in your ProjectSight account. Ask an administrator if you need access to one."
+                  : "Get started by adding your first project."}
             </p>
           </div>
           {searchQuery && (
@@ -819,6 +850,7 @@ export default function ProjectsPage() {
           if (!isOpen) setEditingProject(null);
         }}
         onProjectUpdated={handleProjectUpdated}
+        canEditAccess={isAdmin}
       />
     </div>
   );

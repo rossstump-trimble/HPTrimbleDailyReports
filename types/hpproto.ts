@@ -67,7 +67,6 @@ export interface Project {
   lon?: number;
   keywords?: string[];
   allowedUserEmails?: string[];
-  restrictToAssignedUsers?: boolean;
 }
 
 export interface CrewEntry {

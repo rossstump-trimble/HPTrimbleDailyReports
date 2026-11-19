@@ -5,6 +5,9 @@ import { POST as extractPost } from './[projectId]/extract/route';
 import { saveInspectionRecord, getInspectionById, getDefaultDbPath } from '@/lib/store';
 import fs from 'fs';
 
+// Project access has its own tests in lib/project-guard.test.ts; these tests cover route behavior.
+vi.mock('@/lib/project-guard', () => ({ requireProjectAccessResponse: async () => null }));
+
 function cleanupTestDb() {
   const dbPath = getDefaultDbPath();
   if (dbPath.includes('test') && fs.existsSync(dbPath)) {

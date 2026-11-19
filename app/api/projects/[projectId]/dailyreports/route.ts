@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getStore, getProjectById } from '@/lib/store';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { projectId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const project = getProjectById(projectId);

@@ -12,6 +12,7 @@ import { captureFromDailyReport } from '@/lib/projectsight/send-intake-daily';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { AUTH_COOKIE, SESSION_COOKIE, compactSignedSession, parseVerifiedSession, signSessionPayload } from '@/lib/local-session';
 import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,6 +33,9 @@ export async function POST(
     if (!existing) {
       return NextResponse.json({ error: 'Daily report not found' }, { status: 404 });
     }
+
+    const projectAccessDenied = await requireProjectAccessResponse(req, existing.projectId);
+    if (projectAccessDenied) return projectAccessDenied;
 
     if (existing.projectSightDailyId && existing.approvalStatus === 'approved') {
       return NextResponse.json({

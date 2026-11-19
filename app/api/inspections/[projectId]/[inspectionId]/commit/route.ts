@@ -20,6 +20,7 @@ import { SESSION_COOKIE } from '@/lib/local-session';
 import { tidAccessTokenFromCookie, getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import type { InspectionChecklistItem, InspectionRecord } from '@/types/inspections';
 import type { DailyReport } from '@/types/hpproto';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
@@ -27,6 +28,8 @@ export async function POST(
   req: Request,
   { params }: { params: { projectId: string; inspectionId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId, inspectionId } = params;
     const body = (await req.json()) as {

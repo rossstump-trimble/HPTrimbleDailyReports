@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { deleteDailyReport, getDailyReportById } from '@/lib/store';
 import { requireAuthResponse } from '@/lib/api-auth';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,8 @@ export async function GET(
     if (!report) {
       return NextResponse.json({ error: 'Daily report not found' }, { status: 404 });
     }
+    const projectAccessDenied = await requireProjectAccessResponse(req, report.projectId);
+    if (projectAccessDenied) return projectAccessDenied;
     return NextResponse.json({ report });
   } catch (err) {
     console.error('[api/dailyreports] GET failed', err);
@@ -33,6 +36,11 @@ export async function DELETE(
 
   try {
     const { dailyId } = params;
+    const report = getDailyReportById(dailyId);
+    if (report) {
+      const projectAccessDenied = await requireProjectAccessResponse(req, report.projectId);
+      if (projectAccessDenied) return projectAccessDenied;
+    }
     const deleted = deleteDailyReport(dailyId);
     if (!deleted) {
       return NextResponse.json({ error: 'Daily report not found' }, { status: 404 });

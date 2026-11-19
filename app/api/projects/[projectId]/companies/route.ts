@@ -15,6 +15,7 @@ import { AUTH_COOKIE, SESSION_COOKIE } from '@/lib/local-session';
 import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import { slugTradePartnerId } from '@/lib/trade-partner';
 import type { TradePartner, ProjectCompany, CompanyContact, CompanyCrew } from '@/types/hpproto';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,8 @@ export async function GET(
   req: Request,
   { params }: { params: { projectId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const project = getProjectById(projectId);
@@ -93,6 +96,8 @@ export async function POST(
   req: Request,
   { params }: { params: { projectId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const project = getProjectById(projectId);
@@ -523,6 +528,8 @@ export async function DELETE(
   req: Request,
   { params }: { params: { projectId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const { searchParams } = new URL(req.url);

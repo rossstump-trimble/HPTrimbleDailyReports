@@ -323,10 +323,6 @@ export function updateProject(
   if (Array.isArray(updates.allowedUserEmails)) {
     proj.allowedUserEmails = Array.from(new Set(updates.allowedUserEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
   }
-  if (updates.restrictToAssignedUsers !== undefined) {
-    proj.restrictToAssignedUsers = Boolean(updates.restrictToAssignedUsers);
-  }
-
   saveStore(store, filePath);
   return proj;
 }

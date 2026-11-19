@@ -6,10 +6,13 @@ import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallb
 import { SESSION_COOKIE } from '@/lib/local-session';
 import { tidAccessTokenFromCookie, getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import type { InspectionRecord } from '@/types/inspections';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     let token: string | null = null;
@@ -132,6 +135,8 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
 }
 
 export async function POST(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const body = (await req.json().catch(() => ({}))) as Partial<InspectionRecord>;

@@ -6,10 +6,13 @@ import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallb
 import { AUTH_COOKIE, SESSION_COOKIE } from "@/lib/local-session";
 import { getValidTidAccessToken, tidAccessTokenFromCookie } from "@/lib/projectsight/session-token";
 import { getProjectById, getStore } from "@/lib/store";
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const { searchParams } = new URL(req.url);

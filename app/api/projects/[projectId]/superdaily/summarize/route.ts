@@ -9,6 +9,7 @@ import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallb
 import { listDailyReports, listProjectLocations } from '@/lib/projectsight/client';
 import type { DailyReport } from '@/types/hpproto';
 import type { MissingTradePartner, SuperdailyWeather } from '@/types/superdaily';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +26,8 @@ function extractLocationName(rawLocation: unknown): string {
 }
 
 export async function POST(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const project = getProjectById(projectId);

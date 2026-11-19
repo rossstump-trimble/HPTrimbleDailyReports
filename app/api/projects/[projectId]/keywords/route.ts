@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getProjectById, updateProjectKeywords } from '@/lib/store';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: Request, { params }: { params: { projectId: string } }) {
+export async function GET(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const project = getProjectById(params.projectId);
     if (!project) {
@@ -20,6 +23,8 @@ export async function GET(_req: Request, { params }: { params: { projectId: stri
 }
 
 export async function POST(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const body = (await req.json()) as { keywords: string[] };
     if (!body.keywords || !Array.isArray(body.keywords)) {

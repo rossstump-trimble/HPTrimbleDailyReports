@@ -7,6 +7,7 @@ import { tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
 import { destinationFromCookieWithFallback, DEFAULT_DESTINATION, DESTINATION_COOKIE } from '@/lib/projectsight/destination';
 import { slugTradePartnerId } from '@/lib/trade-partner';
 import type { CompanyContact } from '@/types/hpproto';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,8 @@ export async function POST(
   req: Request,
   { params }: { params: { projectId: string; companyId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId, companyId } = params;
     const project = getProjectById(projectId);

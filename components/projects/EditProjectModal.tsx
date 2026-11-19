@@ -12,7 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Building2, Save, Calendar, Link2, ShieldCheck, Lock } from "lucide-react";
 import type { Project } from "@/types/hpproto";
 
@@ -21,6 +20,7 @@ interface EditProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onProjectUpdated: (project: Project) => void;
+  canEditAccess: boolean;
 }
 
 const DAYS = [
@@ -38,13 +38,13 @@ export default function EditProjectModal({
   open,
   onOpenChange,
   onProjectUpdated,
+  canEditAccess,
 }: EditProjectModalProps) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [workingDays, setWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [psPortfolioId, setPsPortfolioId] = useState("");
   const [psProjectId, setPsProjectId] = useState("");
-  const [restrictToAssignedUsers, setRestrictToAssignedUsers] = useState(false);
   const [allowedEmailsStr, setAllowedEmailsStr] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -56,7 +56,6 @@ export default function EditProjectModal({
       setWorkingDays(project.workingDays || [1, 2, 3, 4, 5]);
       setPsPortfolioId(project.psPortfolioId || "");
       setPsProjectId(project.psProjectId || "");
-      setRestrictToAssignedUsers(Boolean(project.restrictToAssignedUsers));
       setAllowedEmailsStr((project.allowedUserEmails || []).join(", "));
       setError("");
     }
@@ -94,7 +93,6 @@ export default function EditProjectModal({
           workingDays,
           psPortfolioId: psPortfolioId.trim() || undefined,
           psProjectId: psProjectId.trim() || undefined,
-          restrictToAssignedUsers,
           allowedUserEmails: allowedEmails,
         }),
       });
@@ -198,6 +196,7 @@ export default function EditProjectModal({
                   id="edit-ps-portfolio"
                   value={psPortfolioId}
                   onChange={(e) => setPsPortfolioId(e.target.value)}
+                  disabled={!canEditAccess}
                   placeholder="e.g. 8fddbe9f-933a-43b9-8b5e-17ff16f14598"
                   className="text-xs font-mono bg-background"
                 />
@@ -211,6 +210,7 @@ export default function EditProjectModal({
                   id="edit-ps-project"
                   value={psProjectId}
                   onChange={(e) => setPsProjectId(e.target.value)}
+                  disabled={!canEditAccess}
                   placeholder="e.g. 1025 or 28"
                   className="text-xs font-mono bg-background"
                 />
@@ -220,21 +220,14 @@ export default function EditProjectModal({
 
           {/* Project Access & Security Permissions */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-3 bg-muted/20">
-            <div className="flex items-center justify-between gap-2">
-              <div className="space-y-0.5">
-                <Label htmlFor="restrict-ps-users" className="text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#0063a3]" />
-                  <span>Match ProjectSight Project Access</span>
-                </Label>
-                <p className="text-[11px] text-muted-foreground leading-tight">
-                  Restrict visibility so only Hensel Phelps staff assigned to this project in ProjectSight can view or access it.
-                </p>
+            <div className="space-y-0.5">
+              <div className="text-xs font-semibold flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#0063a3]" />
+                <span>Who can see this project</span>
               </div>
-              <Switch
-                id="restrict-ps-users"
-                checked={restrictToAssignedUsers}
-                onCheckedChange={setRestrictToAssignedUsers}
-              />
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                Anyone who has this project in their own ProjectSight account. Only administrators can change the ProjectSight link or add exceptions below.
+              </p>
             </div>
 
             <div className="space-y-1 pt-1 border-t border-border">
@@ -246,6 +239,7 @@ export default function EditProjectModal({
                 id="edit-allowed-emails"
                 value={allowedEmailsStr}
                 onChange={(e) => setAllowedEmailsStr(e.target.value)}
+                disabled={!canEditAccess}
                 placeholder="user1@henselphelps.com, user2@henselphelps.com"
                 className="text-xs font-mono bg-background"
               />

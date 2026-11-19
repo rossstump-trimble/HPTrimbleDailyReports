@@ -1,9 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET as getItems } from './[projectId]/items/route';
 import { POST as commitItems } from './[projectId]/commit/route';
 import { getDefaultDbPath } from '@/lib/store';
 import fs from 'fs';
 import path from 'path';
+
+// Project access has its own tests in lib/project-guard.test.ts; these tests cover route behavior.
+vi.mock('@/lib/project-guard', () => ({ requireProjectAccessResponse: async () => null }));
 
 function cleanupTestDb() {
   const dbPath = getDefaultDbPath();

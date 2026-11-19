@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { getProjects, createProject, getCapacityStatus } from '@/lib/store';
+import { getProjects, createProject, updateProject, getCapacityStatus } from '@/lib/store';
 import { requireAuthResponse, getRequestAuthContext } from '@/lib/api-auth';
-import { getUserAccessiblePsProjects } from '@/lib/projectsight/project-access';
-import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
-import { SESSION_COOKIE, AUTH_COOKIE } from '@/lib/local-session';
+import { filterProjectsForUser } from '@/lib/project-guard';
+import { normalizePsPortfolioId } from '@/lib/projectsight/project-access';
 
 export const runtime = 'nodejs';
 
@@ -15,46 +13,17 @@ export async function GET(req: Request) {
   try {
     const auth = getRequestAuthContext(req);
     const capacity = getCapacityStatus();
-    let projects = getProjects();
+    const allProjects = getProjects();
 
-    // If not a system administrator, filter projects by user permissions
-    if (!auth.isAdmin && auth.email) {
-      const userEmail = auth.email.toLowerCase();
-      let userPsProjectIds: Set<string> | null = null;
-      try {
-        const jar = cookies();
-        const rawCookie = jar.get(SESSION_COOKIE)?.value || jar.get(AUTH_COOKIE)?.value;
-        const tokenRes = await getValidTidAccessToken(rawCookie);
-        if (tokenRes.token) {
-          userPsProjectIds = await getUserAccessiblePsProjects(tokenRes.token, projects).catch(() => null);
-        }
-      } catch {
-        // ignore token lookup error
-      }
-
-      projects = projects.filter((p) => {
-        // 1. Explicitly allowed email exceptions on this project
-        if (p.allowedUserEmails && p.allowedUserEmails.length > 0) {
-          const allowed = p.allowedUserEmails.map((e) => e.toLowerCase());
-          if (allowed.includes(userEmail)) return true;
-        }
-
-        // 2. Restricted to ProjectSight assigned project users
-        if (p.restrictToAssignedUsers && p.psProjectId) {
-          if (userPsProjectIds) {
-            return userPsProjectIds.has(String(p.psProjectId).toLowerCase());
-          }
-          return false;
-        }
-
-        // 3. Unrestricted / demo projects
-        return true;
-      });
-    }
+    // Admins see everything only when they ask for it, so their default view matches what ProjectSight grants them.
+    const showAll = auth.isAdmin && new URL(req.url).searchParams.get('scope') === 'all';
+    const projects = showAll ? allProjects : await filterProjectsForUser(auth, allProjects);
 
     return NextResponse.json({
       projects,
       capacity,
+      isAdmin: auth.isAdmin,
+      hiddenCount: allProjects.length - projects.length,
     });
   } catch (err) {
     console.error('[api/projects] GET failed', err);
@@ -74,22 +43,33 @@ export async function POST(req: Request) {
       tradePartners?: Array<{ id: string; name: string; contactEmail?: string; category?: string }>;
       psPortfolioId?: string;
       psProjectId?: string;
-      restrictToAssignedUsers?: boolean;
-      allowedUserEmails?: string[];
     };
 
     if (!body.name || !body.name.trim()) {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
     }
 
-    const created = createProject({
+    const psPortfolioId = body.psPortfolioId?.trim()
+      ? normalizePsPortfolioId(body.psPortfolioId)
+      : undefined;
+    if (body.psPortfolioId?.trim() && !psPortfolioId) {
+      return NextResponse.json({ error: 'ProjectSight Portfolio ID must be a GUID' }, { status: 400 });
+    }
+
+    let created = createProject({
       name: body.name.trim().slice(0, 160),
       code: body.code?.trim().slice(0, 32),
       workingDays: body.workingDays,
       tradePartners: body.tradePartners,
-      psPortfolioId: body.psPortfolioId?.trim().slice(0, 64),
+      psPortfolioId,
       psProjectId: body.psProjectId?.trim().slice(0, 64),
     });
+
+    // Otherwise a creator without a verifiable ProjectSight link could not see the project they just made.
+    const auth = getRequestAuthContext(req);
+    if (!auth.isAdmin && auth.email) {
+      created = updateProject(created.id, { allowedUserEmails: [auth.email] }) ?? created;
+    }
 
     return NextResponse.json({ project: created }, { status: 201 });
   } catch (err) {

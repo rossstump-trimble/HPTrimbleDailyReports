@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getProjectById, updateProject, updateProjectWorkingDays, updateProjectTradePartners, deleteProject, getCapacityStatus } from '@/lib/store';
 import { getRequestAuthContext, requireAuthResponse, requireAdminResponse } from '@/lib/api-auth';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
+import { normalizePsPortfolioId } from '@/lib/projectsight/project-access';
 
 export const runtime = 'nodejs';
 
@@ -14,8 +16,9 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
     const auth = getRequestAuthContext(req);
     const capacity = getCapacityStatus();
 
-    if (!auth.authenticated) {
-      // Return redacted project view for public QR intake form
+    const hasFullAccess = auth.authenticated && !(await requireProjectAccessResponse(req, params.projectId));
+    if (!hasFullAccess) {
+      // Return redacted project view for public QR intake form (and signed-in users without ProjectSight access)
       return NextResponse.json({
         project: {
           id: project.id,
@@ -40,7 +43,7 @@ export async function GET(req: Request, { params }: { params: { projectId: strin
 }
 
 export async function PATCH(req: Request, { params }: { params: { projectId: string } }) {
-  const denied = requireAuthResponse(req);
+  const denied = requireAuthResponse(req) ?? (await requireProjectAccessResponse(req, params.projectId));
   if (denied) return denied;
 
   try {
@@ -51,7 +54,6 @@ export async function PATCH(req: Request, { params }: { params: { projectId: str
       psProjectId?: string;
       workingDays?: number[];
       keywords?: string[];
-      restrictToAssignedUsers?: boolean;
       allowedUserEmails?: string[];
       tradePartners?: Array<{ id: string; name: string; contactEmail?: string; category?: string }>;
     };
@@ -61,14 +63,39 @@ export async function PATCH(req: Request, { params }: { params: { projectId: str
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
+    // These fields decide who can see the project, so only admins may change them.
+    const { isAdmin } = getRequestAuthContext(req);
+    if (!isAdmin) {
+      const normalizeEmails = (emails: string[] | undefined): string =>
+        Array.from(new Set((emails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean))).sort().join(',');
+      const changesAccess =
+        (body.allowedUserEmails !== undefined &&
+          normalizeEmails(body.allowedUserEmails) !== normalizeEmails(updated.allowedUserEmails)) ||
+        (body.psPortfolioId !== undefined && body.psPortfolioId !== (updated.psPortfolioId ?? '')) ||
+        (body.psProjectId !== undefined && body.psProjectId !== (updated.psProjectId ?? ''));
+      if (changesAccess) {
+        return NextResponse.json(
+          { error: 'Only administrators can change ProjectSight links or project access.' },
+          { status: 403 },
+        );
+      }
+    }
+
+    let psPortfolioId = body.psPortfolioId;
+    if (psPortfolioId?.trim()) {
+      psPortfolioId = normalizePsPortfolioId(psPortfolioId);
+      if (!psPortfolioId) {
+        return NextResponse.json({ error: 'ProjectSight Portfolio ID must be a GUID' }, { status: 400 });
+      }
+    }
+
     updated = updateProject(params.projectId, {
       name: body.name,
       code: body.code,
-      psPortfolioId: body.psPortfolioId,
+      psPortfolioId,
       psProjectId: body.psProjectId,
       workingDays: body.workingDays,
       keywords: body.keywords,
-      restrictToAssignedUsers: body.restrictToAssignedUsers,
       allowedUserEmails: body.allowedUserEmails,
     }) ?? updated;
 

@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { answerDashboardQuestion } from "@/lib/dashboard/ask";
 import { currentYearMonth, getDashboardPayload, type SourceDailyReport } from "@/lib/dashboard/enrich";
 import { getProjectById, getStore } from "@/lib/store";
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request, { params }: { params: { projectId: string } }) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const { projectId } = params;
     const body = (await req.json()) as { question?: string; month?: string; asOf?: string };

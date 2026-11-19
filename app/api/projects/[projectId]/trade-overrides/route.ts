@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getProjectById, setTradeDayOverride } from '@/lib/store';
+import { requireProjectAccessResponse } from '@/lib/project-guard';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { projectId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const project = getProjectById(params.projectId);
     if (!project) {
@@ -26,6 +29,8 @@ export async function POST(
   req: Request,
   { params }: { params: { projectId: string } },
 ) {
+  const projectAccessDenied = await requireProjectAccessResponse(req, params.projectId);
+  if (projectAccessDenied) return projectAccessDenied;
   try {
     const body = (await req.json()) as {
       tradePartnerId: string;
