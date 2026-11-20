@@ -6,6 +6,7 @@ import { SuperdailyPrintDocument } from "./SuperdailyPrintDocument";
 import type { SuperdailyReport } from "@/types/superdaily";
 
 const mockReport: SuperdailyReport = {
+  id: "sd-1",
   projectId: "1025",
   projectName: "Harbor Center Tower",
   date: "2026-09-17",
@@ -50,7 +51,7 @@ const mockReport: SuperdailyReport = {
   safetyAndStas: {
     allCompleted: false,
     staNotes: "Apex completed morning STA; Tri-County pending submission.",
-    incidentsReported: 0,
+    incidentsReported: false,
   },
 };
 

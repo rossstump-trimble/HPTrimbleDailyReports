@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Users, Clock, Wrench, FileText, AlertTriangle, User, Camera, Paperclip } from "lucide-react";
 import { DailyReport } from "@/types/hpproto";
+import OriginalTextPanel from "@/components/review/OriginalTextPanel";
 import {
   DEFAULT_DESTINATION,
   DESTINATION_COOKIE,
@@ -265,6 +266,8 @@ export function DailyDetailModal({ open, onOpenChange, cell }: DailyDetailModalP
                   </div>
                 </div>
               )}
+
+              <OriginalTextPanel report={report} />
 
               {report.submittedBy && (
                 <p className="text-xs text-muted-foreground pt-1 border-t">

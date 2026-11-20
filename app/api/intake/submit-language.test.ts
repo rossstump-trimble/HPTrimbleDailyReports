@@ -1,6 +1,4 @@
 import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/lib/gemini-client', async (importOriginal) => {
@@ -15,12 +13,6 @@ import { getDefaultDbPath } from '@/lib/store';
 import { uploadRoot } from '@/lib/upload-store';
 
 const mockedGenerate = vi.mocked(geminiGenerate);
-
-// Test files run in parallel; a private data directory keeps this file from clearing another file's database.
-const isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hp-submit-language-'));
-process.env.HPPROTO_DB_PATH = path.join(isolatedDir, 'db.json');
-process.env.HPPROTO_BACKUP_ROOT = path.join(isolatedDir, 'backups');
-process.env.HPPROTO_UPLOAD_ROOT = path.join(isolatedDir, 'uploads');
 
 function cleanupTestArtifacts() {
   for (const target of [getDefaultDbPath(), defaultBackupRoot(), uploadRoot()]) {
