@@ -1,4 +1,5 @@
 import type { PunchItem, PunchStatus, PunchImportance } from '@/types/punch';
+import { psCrewsFromCompany, type PsCrew } from '@/lib/ps-crews';
 
 export class ProjectSightHttpError extends Error {
   readonly status: number;
@@ -336,6 +337,26 @@ export async function listCompaniesWithContacts(
   projectId?: string,
 ): Promise<Record<string, unknown>[]> {
   return listCompanies(accessToken, portfolioId, projectId);
+}
+
+// Crews only come back on the portfolio-level Companies call; the project-level and
+// contract lookups that listCompanies prefers do not include them.
+export async function listPortfolioCrews(
+  accessToken: string,
+  portfolioId: string,
+): Promise<Map<number, PsCrew[]>> {
+  const safePort = safePsPathSegment(portfolioId);
+  const payload = await psFetch(`${projectSightBaseUrl()}/${safePort}/Companies`, {
+    method: 'GET',
+    headers: projectSightHeaders(accessToken),
+  });
+  const crewsByCompany = new Map<number, PsCrew[]>();
+  for (const company of items(payload)) {
+    const companyId = Number(caseGet(company, ['CompanyID', 'CompanyId']));
+    const crews = psCrewsFromCompany(company);
+    if (Number.isFinite(companyId) && crews.length > 0) crewsByCompany.set(companyId, crews);
+  }
+  return crewsByCompany;
 }
 
 function resolveCompanyAddressId(company: Record<string, unknown>): number {

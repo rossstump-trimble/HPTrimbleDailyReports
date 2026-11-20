@@ -41,6 +41,7 @@ interface SyncCandidateCompany {
   name: string;
   trade: string;
   contactsCount: number;
+  crews: { psCrewId: number; name: string; workers?: number }[];
   alreadyExists: boolean;
 }
 
@@ -75,6 +76,7 @@ export default function CompaniesPage() {
   const [syncPreview, setSyncPreview] = useState<SyncPreviewData | null>(null);
   const [trackImportedByDefault, setTrackImportedByDefault] = useState(true);
   const [selectedImportIds, setSelectedImportIds] = useState<Set<string>>(new Set());
+  const [selectedCrewIds, setSelectedCrewIds] = useState<Set<number>>(new Set());
   const [importFilterQuery, setImportFilterQuery] = useState("");
 
   // New Contact Dialog
@@ -312,6 +314,7 @@ export default function CompaniesPage() {
       const candidates: SyncCandidateCompany[] = Array.isArray(json.candidates) ? json.candidates : [];
       setTrackImportedByDefault(addedCount <= 50);
       setImportFilterQuery("");
+      setSelectedCrewIds(new Set(candidates.flatMap((c) => (c.crews ?? []).map((cr) => cr.psCrewId))));
       // For small lists (<= 50), pre-select all new candidates; for large portfolio dumps (> 50), start unselected so user can cherry-pick
       if (candidates.length > 0 && addedCount <= 50) {
         setSelectedImportIds(new Set(candidates.map((c) => c.id)));
@@ -350,6 +353,7 @@ export default function CompaniesPage() {
           action: "sync-connected",
           trackImported: trackImportedByDefault,
           selectedCompanyIds: Array.from(selectedImportIds),
+          selectedCrewIds: Array.from(selectedCrewIds),
         }),
       });
       const json = await res.json();
@@ -1048,8 +1052,8 @@ export default function CompaniesPage() {
                       filteredCandidates.slice(0, 150).map((cand) => {
                         const checked = selectedImportIds.has(cand.id);
                         return (
+                          <div key={cand.id}>
                           <label
-                            key={cand.id}
                             className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer transition-colors"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -1072,7 +1076,7 @@ export default function CompaniesPage() {
                                   {cand.name}
                                 </span>
                                 <span className="text-[10px] text-slate-500">
-                                  {cand.trade} · {cand.contactsCount} contact(s)
+                                  {cand.trade} · {cand.contactsCount} contact(s) · {(cand.crews ?? []).length} crew(s)
                                 </span>
                               </div>
                             </div>
@@ -1089,6 +1093,31 @@ export default function CompaniesPage() {
                               )}
                             </div>
                           </label>
+                          {checked && (cand.crews ?? []).length > 0 && (
+                            <div className="pb-2 pl-9 pr-3 space-y-1">
+                              {cand.crews.map((crew) => (
+                                <label key={crew.psCrewId} className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCrewIds.has(crew.psCrewId)}
+                                    onChange={(e) => {
+                                      const isChecked = e.target.checked;
+                                      setSelectedCrewIds((prev) => {
+                                        const next = new Set(prev);
+                                        if (isChecked) next.add(crew.psCrewId);
+                                        else next.delete(crew.psCrewId);
+                                        return next;
+                                      });
+                                    }}
+                                    className="rounded border-slate-300"
+                                  />
+                                  <span>Crew: {crew.name}</span>
+                                  {crew.workers != null && <span className="text-slate-400">({crew.workers} workers)</span>}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          </div>
                         );
                       })
                     )}

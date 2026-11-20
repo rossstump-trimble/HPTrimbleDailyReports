@@ -5,6 +5,7 @@ import {
   attachDailyReportFile,
   extractCreatedDailyId,
   listCompaniesWithContacts,
+  listPortfolioCrews,
   createProjectSightCompanyContact,
 } from './client';
 
@@ -37,6 +38,29 @@ describe('client HTTP', () => {
       text: async () => JSON.stringify({ Items: [{ PortfolioId: 'p1', Name: 'HP' }] }),
     });
     await expect(listPortfolios('tok')).resolves.toEqual([{ id: 'p1', name: 'HP' }]);
+  });
+
+  it('groups portfolio crews by company id and ignores deleted crews', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify([
+          {
+            CompanyID: 4,
+            Name: 'Satellite',
+            Crews: [
+              { CrewID: 11, CrewName: 'Crew A', Workers: 6 },
+              { CrewID: 12, CrewName: 'Old crew', Deleted: true },
+            ],
+          },
+          { CompanyID: 5, Name: 'No crews', Crews: [] },
+        ]),
+    });
+    const crews = await listPortfolioCrews('tok', 'pf');
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://ps.example/v1/pf/Companies');
+    expect(crews.get(4)).toEqual([{ psCrewId: 11, name: 'Crew A', workers: 6 }]);
+    expect(crews.has(5)).toBe(false);
   });
 
   it('creates a daily then attaches multipart file', async () => {

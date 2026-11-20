@@ -9,7 +9,8 @@ import {
   setProjectCompanies,
   toggleCompanyTracking,
 } from '@/lib/store';
-import { listCompaniesWithContacts } from '@/lib/projectsight/client';
+import { listCompaniesWithContacts, listPortfolioCrews } from '@/lib/projectsight/client';
+import { mergePsCrews, type PsCrew } from '@/lib/ps-crews';
 import { DEFAULT_DESTINATION, DESTINATION_COOKIE, destinationFromCookieWithFallback } from '@/lib/projectsight/destination';
 import { AUTH_COOKIE, SESSION_COOKIE } from '@/lib/local-session';
 import { getValidTidAccessToken, tidAccessTokenFromCookie } from '@/lib/projectsight/session-token';
@@ -118,6 +119,7 @@ export async function POST(
       isTracked?: boolean;
       trackImported?: boolean;
       selectedCompanyIds?: string[];
+      selectedCrewIds?: number[];
       defaultCrewName?: string;
       crews?: Array<{ id?: string; name: string; psCrewId?: number }>;
       crewName?: string;
@@ -364,6 +366,13 @@ export async function POST(
       }
 
       const rawCompanies = await listCompaniesWithContacts(token, psPortfolioId, psProjectId);
+      const crewsByCompany = await listPortfolioCrews(token, psPortfolioId).catch((err) => {
+        console.warn('[api/companies] ProjectSight crew lookup failed', err);
+        return new Map<number, PsCrew[]>();
+      });
+      const selectedCrewFilter = Array.isArray(body.selectedCrewIds)
+        ? new Set(body.selectedCrewIds.map(Number))
+        : null;
       const currentCompanies = getProjectCompanies(projectId);
       const existingMap = new Map(currentCompanies.map((c) => [c.id.toLowerCase(), c]));
       const nameMap = new Map(currentCompanies.map((c) => [c.name.toLowerCase(), c]));
@@ -377,6 +386,7 @@ export async function POST(
         name: string;
         trade: string;
         contactsCount: number;
+        crews: PsCrew[];
         alreadyExists: boolean;
       }> = [];
       const seenIncomingIds = new Set<string>();
@@ -417,6 +427,11 @@ export async function POST(
           })
           .filter(Boolean) as CompanyContact[];
 
+        const psCrews = (psCompId != null && crewsByCompany.get(psCompId)) || [];
+        const importedCrews = selectedCrewFilter
+          ? psCrews.filter((crew) => selectedCrewFilter.has(crew.psCrewId))
+          : psCrews;
+
         const existing = existingMap.get(compId.toLowerCase()) || nameMap.get(compName.toLowerCase());
         candidateCompanies.push({
           id: compId,
@@ -424,6 +439,7 @@ export async function POST(
           name: compName,
           trade: cat || 'Trade Partner',
           contactsCount: contacts.length,
+          crews: psCrews,
           alreadyExists: Boolean(existing),
         });
 
@@ -456,6 +472,12 @@ export async function POST(
             psCompanyId: psCompId || existing.psCompanyId,
             trade: cat || existing.trade,
             contacts: mergedContacts,
+            ...(importedCrews.length > 0
+              ? {
+                  crews: mergePsCrews(existing.crews, importedCrews),
+                  defaultCrewName: existing.defaultCrewName || importedCrews[0].name,
+                }
+              : {}),
           });
         } else {
           addedCount++;
@@ -473,6 +495,9 @@ export async function POST(
             trade: cat || 'Trade Partner',
             isTracked: shouldTrack,
             contacts,
+            ...(importedCrews.length > 0
+              ? { crews: mergePsCrews(undefined, importedCrews), defaultCrewName: importedCrews[0].name }
+              : {}),
           });
         }
       }
