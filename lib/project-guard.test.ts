@@ -80,6 +80,37 @@ describe('filterProjectsForUser', () => {
 
     expect(visible).toEqual([]);
   });
+
+  describe('hidden-project log', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    beforeEach(() => warn.mockClear());
+
+    it('says why each project was hidden for the user', async () => {
+      const unlinked = project('3', { psPortfolioId: undefined, psProjectId: undefined });
+
+      await filterProjectsForUser(auth(), [project('1'), project('2'), unlinked]);
+
+      const line = warn.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(line).toContain('super@henselphelps.com');
+      expect(line).toContain('2=not-in-projectsight-list');
+      expect(line).toContain('3=no-projectsight-link');
+      expect(line).not.toContain('1=');
+    });
+
+    it('reports a missing token as the reason', async () => {
+      vi.mocked(getValidTidAccessToken).mockResolvedValue({ token: null });
+
+      await filterProjectsForUser(auth(), [project('1')]);
+
+      expect(warn.mock.calls.map((c) => c.join(' ')).join('\n')).toContain('1=no-projectsight-token');
+    });
+
+    it('stays quiet when nothing is hidden', async () => {
+      await filterProjectsForUser(auth(), [project('1')]);
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('requireProjectAccessResponse', () => {

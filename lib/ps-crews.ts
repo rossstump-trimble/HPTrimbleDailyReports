@@ -16,6 +16,8 @@ export function psCrewsFromCompany(raw: Record<string, unknown>): PsCrew[] {
     const psCrewId = Number(row.CrewID);
     const name = String(row.CrewName ?? '').trim();
     if (!Number.isFinite(psCrewId) || psCrewId <= 0 || !name) continue;
+    // ProjectSight gives every company an unnamed default crew; it is not a real crew to pick.
+    if (row.IsDefault === true && name.toUpperCase() === 'N/A') continue;
     const workers = Number(row.Workers);
     crews.push({ psCrewId, name, ...(Number.isFinite(workers) ? { workers } : {}) });
   }

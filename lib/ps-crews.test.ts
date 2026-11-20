@@ -21,6 +21,21 @@ describe('psCrewsFromCompany', () => {
     expect(crews.map((c) => c.psCrewId)).toEqual([4]);
   });
 
+  it('skips the "N/A" placeholder crew ProjectSight creates for every company', () => {
+    const crews = psCrewsFromCompany({
+      Crews: [
+        { CrewID: 1, CrewName: 'N/A', IsDefault: true },
+        { CrewID: 5, CrewName: 'Crew B', IsDefault: false },
+      ],
+    });
+    expect(crews.map((c) => c.psCrewId)).toEqual([5]);
+  });
+
+  it('keeps a real crew even when it is the default one', () => {
+    const crews = psCrewsFromCompany({ Crews: [{ CrewID: 9, CrewName: 'Main Crew', IsDefault: true }] });
+    expect(crews.map((c) => c.psCrewId)).toEqual([9]);
+  });
+
   it('returns nothing when the company has no Crews array', () => {
     expect(psCrewsFromCompany({})).toEqual([]);
     expect(psCrewsFromCompany({ Crews: null })).toEqual([]);

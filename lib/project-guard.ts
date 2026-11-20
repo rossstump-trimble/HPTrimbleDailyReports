@@ -6,6 +6,7 @@ import { getProjectById } from '@/lib/store';
 import { getValidTidAccessToken } from '@/lib/projectsight/session-token';
 import {
   getUserAccessiblePsProjectKeys,
+  normalizePsPortfolioId,
   projectHasPsAccess,
 } from '@/lib/projectsight/project-access';
 import type { Project } from '@/types/hpproto';
@@ -26,18 +27,32 @@ export async function filterProjectsForUser(
   );
 
   let accessibleKeys = new Set<string>();
+  let hasToken = false;
   if (needsPsCheck.length > 0) {
     const jar = cookies();
     const rawCookie = jar.get(SESSION_COOKIE)?.value || jar.get(AUTH_COOKIE)?.value;
     const { token } = await getValidTidAccessToken(rawCookie);
+    hasToken = Boolean(token);
     if (token) accessibleKeys = await getUserAccessiblePsProjectKeys(token, needsPsCheck);
   }
 
-  return projects.filter(
+  const visible = projects.filter(
     (p) =>
       p.allowedUserEmails?.some((allowed) => allowed.toLowerCase() === email) ||
       projectHasPsAccess(p, accessibleKeys),
   );
+
+  // Denials otherwise leave no trace, so "I can't see my project" can't be diagnosed later.
+  const hidden = projects.filter((p) => !visible.includes(p));
+  if (hidden.length > 0) {
+    const reasons = hidden.map((p) => {
+      if (!normalizePsPortfolioId(p.psPortfolioId) || !p.psProjectId?.trim()) return `${p.id}=no-projectsight-link`;
+      if (!hasToken) return `${p.id}=no-projectsight-token`;
+      return `${p.id}=not-in-projectsight-list`;
+    });
+    console.warn(`[project-guard] hid ${hidden.length} project(s) from ${auth.email}: ${reasons.join(', ')}`);
+  }
+  return visible;
 }
 
 /**
